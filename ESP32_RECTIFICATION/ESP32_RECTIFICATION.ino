@@ -835,12 +835,12 @@ html_page = html_page + "<tr><td>K2 Time</td><td align=\"center\">" + String(k2_
 html_page = html_page + "<tr><td>Stab Time</td><td align=\"center\">" + String(stab_time) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Head Time</td><td align=\"center\">" + String(head_time) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Delta T</td><td align=\"center\">" + String(delt) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Decrement K2</td><td align=\"center\">" + String(decr) + "</td><td align=\"center\"> ms </td></tr>";
-html_page = html_page + "<tr><td>Stab Enable</td><td align=\"center\">" + String(pow_stab) + "</td><td align=\"center\"> Wt </td></tr>";
+html_page = html_page + "<tr><td>Cycle Decrement</td><td align=\"center\">" + String(decr) + "</td><td align=\"center\"> sec </td></tr>";
+html_page = html_page + "<tr><td>Stab Enable</td><td align=\"center\">" + String(pow_stab) + "</td><td align=\"center\"> - </td></tr>";
 html_page = html_page + "<tr><td>Init Fix Temp</td><td align=\"center\">" + String(uo_temp_fix_init) + "</td><td align=\"center\">&#176C</td></tr>";
 html_page = html_page + "<tr><td>Fixed Temp</td><td align=\"center\">" + String(uo_temp_fix) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Init Fix Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt st</td></tr>";
-html_page = html_page + "<tr><td>Delta Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt st</td></tr>";
+html_page = html_page + "<tr><td>Init Fix Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
+html_page = html_page + "<tr><td>Delta Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
 html_page = html_page + "<tr><td>Temp over-delta</td><td align=\"center\">" + String(xflag_count) + "</td><td align=\"center\"> - </td></tr>";
 html_page = html_page + "<tr><td>Spent Stab</td><td align=\"center\">" + String(cnt_stab) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Spent Head</td><td align=\"center\">" + String(cnt_head) + "</td><td align=\"center\"> min </td></tr>";
@@ -848,7 +848,7 @@ html_page = html_page + "<tr><td>Spent Main</td><td align=\"center\">" + String(
 html_page = html_page + "<tr><td>Atm.pressure</td><td align=\"center\">" + String(bmp_press) + "</td><td align=\"center\"> mm rt.st. </td></tr>";
 html_page = html_page + "<tr><td>Razgon Power</td><td align=\"center\">" + String(rpower) + "</td><td align=\"center\"> % </td></tr>";
 html_page = html_page + "<tr><td>Calc Power</td><td align=\"center\">" + String(watt_pow) + "</td><td align=\"center\"> Wt</td></tr>";
-html_page = html_page + "<tr><td>Current Power</td><td align=\"center\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
+html_page = html_page + "<tr><td>Fact Power</td><tpd align=\"center\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
 html_page = html_page + "<tr><td>Voltage</td><td align=\"center\">" + String(voltage) + "</td><td align=\"center\"> V </td></tr>";
 html_page = html_page + "<tr><td>Current</td><td align=\"center\">" + String(current) + "</td><td align=\"center\"> A </td></tr>";
 html_page = html_page + "<tr><td>Energy</td><td align=\"center\">" + String(energy) + "</td><td align=\"center\"> kWt*h </td></tr>";
