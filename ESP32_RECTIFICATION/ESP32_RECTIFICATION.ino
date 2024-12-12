@@ -10,10 +10,10 @@
 #include <PZEM004Tv30.h>           // PZEM-004t измеритель мощности
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // КОНСТАНТЫ ПИНОВ
-#define PUMP_PIN 15                // Сигнал Enable на помпу в блок охлаждения
+#define PUMP_PIN 14                // Сигнал Enable на помпу в блок охлаждения
 #define KL1_PIN 13                 // Клапан 1 (отбор голов)
 #define KL2_PIN 12                 // Клапан 2 (отбор продукта)
-#define KL3_PIN 14                 // Клапан 3 (отбор продукта после завышения по температуре)
+//#define KL3_PIN 14               // Клапан 3 (отбор продукта после завышения по температуре) ЗАМЕНИТЬ НА ПИТАНИЕ ПОМПЫ!
 #define CONT_PIN 27                // На твердотельное реле контактора
 #define TC_PIN 26                  // Термодатчик куба
 #define TD_PIN 33                  // Термодатчик дефлегматора или ТСА
@@ -29,8 +29,8 @@
 #define PZEM_SERIAL Serial         // Стандартный Serial для PZEM-004
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ГРАНИЧНЫЕ УСЛОВИЯ
-#define P_START_UO 50              // Включение помпы по температуре царги/узла отбора
-#define P_START_C  70              // Включение помпы по температуре в кубе
+#define P_START_UO 75              // Включение помпы по температуре царги/узла отбора
+#define P_START_C  75              // Включение помпы по температуре в кубе
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ДАННЫЕ Wi-Fi СЕТИ 2.4GHz 
@@ -66,7 +66,7 @@ float energy;           // ЗАТРАТЫ ЭНЕРГИИ
 float frequency;        // ЧАСТОТА СЕТИ
 float watt_pow;         // ВЫЧИСЛЯЕМАЯ МОЩНОСТЬ ПО % ОТ МОЩНОСТИ ТЭН
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-int mode = 4;           // РЕЖИМ РАБОТЫ. ПО УМОЛЧАНИЮ 4(MANUAL)
+int mode = 3;           // РЕЖИМ РАБОТЫ. ПО УМОЛЧАНИЮ 4(MANUAL)
 int ten_init_pow;       // НОМИНАЛЬНАЯ МОЩНОСТЬ ТЭНА
 int ten_pow;            // ЗАДАНИЕ МОЩНОСТИ ТЭНА
 int dimmer;             // ДИММЕР. ХРАНИТ ВРЕМЯ ВКЛ СИМИСТОРА В мкс ОТ ПРОХОЖДЕНИЯ НУЛЯ СИНУСОИДОЙ
@@ -84,27 +84,25 @@ int k2_per;             // ПЕРИОД РАБОТЫ КЛАПАНА 2
 int k1_time;            // % ВРЕМЕНИ ОТКРЫТИЯ КЛАПАНА 1
 int k2_time;            // % ВРЕМЕНИ ОТКРЫТИЯ КЛАПАНА 2
 int k1_per2;            // ПЕРИОД КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ
-int k3_per;             // ПЕРИОД КЛАПАНА 3
 int k1_time2;           // % ВРЕМЕНИ ОТКРЫТИЯ КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ 
-int k3_time;            // % ОТКРЫТИЯ КЛАПАНА 3
-
 int decr;               // ДЕКРЕМЕНТ СНИЖЕНИЯ СКОРОСТИ ОТБОРА %
 int re_pwr_start;       // % МОЩНОСТИ ТЭН В НАЧАЛЕ РЕКТИФИКАЦИИ
 int re_pwr_end;         // % МОЩНОСТИ ТЭН В КОНЦЕ РЕКТИФИКАЦИИ  
 int ps_pwr_start;       // % МОЩНОСТИ ТЭН POTSTILL НАЧАЛО
 int ps_pwr_end;         // % МОЩНОСТИ ТЭН POTSTILL КОНЕЦ
 int man_pwr;            // % МОЩНОСТИ НА РУЧНОМ РЕЖИМЕ 
+int rpower;             // % МОЩНОСТИ ТЭН ДЛЯ РАЗГОНА КУБА
 int ptr;                // УКАЗАТЕЛЬ В МЕНЮ УСТАНОВОК
 int start_stop = 0;     // ФЛАГ СТАРТ/СТОП
 int fail_c = 99;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. КУБА 
-int fail_d = 45;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. ДЕФЛЕГМАТОРА
+int fail_d = 55;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. ДЕФЛЕГМАТОРА
 int ps_stop_temp;       // ТЕМПЕРАТУРА ОСТАНОВКИ НА POTSTILL
 int zoom_per = 500;     // ПЕРИОД ЗУМЕРА МС (500 DEFAULT)
 int alarm_counter = 0;  // СЧЕТЧИК СЕКУНД ПРЕДУПРЕЖДЕНИЯ ОБ АВАРИИ ПЕРЕД ОТКЛЮЧЕНИЕМ
 int bmp_press;          // АТМОСФЕРНОЕ ДАВЛЕНИЕ В ММ РТ.СТ.
 int ten_pow_delt = 0;   // ВЫЧИСЛЯЕМАЯ ДЕЛЬТУ ПО МОЩНОСТИ в %
-int ten_pow_calc = 0;       // ВЫЧИСЛЯЕМАЯ КОРРЕКТИРОВКА МОЩНОСТИ В %
-int tuo_ref;                 // Температура царги/узла отбора от которой стартует режим стабилизации
+int ten_pow_calc = 0;   // ВЫЧИСЛЯЕМАЯ КОРРЕКТИРОВКА МОЩНОСТИ В %
+int tuo_ref;            // Температура царги/узла отбора от которой стартует режим стабилизации
 // ФЛАГИ АВАРИЙ
 bool alarm_tsa = 0;
 bool alarm_cube = 0;
@@ -122,6 +120,7 @@ bool tflag = 0;          // ФЛАГ ФИКСАЦИИ ТЕМПЕРАТУРЫ У�
 bool xflag = 0;          // ФЛАГ ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ УО/ЦАРГИ
 bool zoom_enable = 1;    // ВКЛ/ОТКЛ ЗУМЕРА 
 bool mq3_enable = 0;     // ВКЛ/ОТКЛ ДАТЧИКА ПАРОВ СПИРТА
+bool pow_stab = 1;       // ВКЛ/ОТКЛ СТАБИЛИЗАЦИИ МОЩНОСТИ
 // СТРОКОВЫЕ
 String submode;         // ИНДИКАТОР ПОДРЕЖИМА РАБОТЫ РЕКТИФИКАЦИИ
 String mode_desc;       // ОПИСАНИЕ РЕЖИМА ДЛЯ ДИСПЛЕЯ
@@ -131,10 +130,10 @@ String err_desc;        // СТРОКА ОШИБКИ
 // ДВУМЕРНЫЙ МАССИВ СТРОК МЕНЮ УСТАНОВОК. РАЗБИТ ПО ЭКРАНАМ(СТОЛБЦЫ)
 String menu_settings[4][7] = 
 {
-{"K1 CYCLE 1:   ","K2 CYCLE:     ","STAB TIME:    ","RE PWR START: ","PS STOP TEMP: ","ERR CUBE TEMP:","MQ3 SENSOR:   "},
-{"K1 CYCLE 2:   ","K3 CYCLE:     ","HEAD TIME:    ","RE PWR END:   ","MODE:        " ,"ERR TSA TEMP: ","TUO REF       "},
-{"K1 TIME 1:   ","K2 TIME:     ","DELTA:        ","PS PWR START: ","MANUAL POWER: ","TEN FULL POW: ","SAVE SETTINGS "},
-{"K1 TIME 2:   ","K3 TIME:     ","DECREMENT:   ","PS PWR END:   ","WORK/STOP:    ","ZOOMER:       ","EXIT          "}
+{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA       : ","PS PWR START: ","MODE     :   ", "ERR CUBE TEMP:","MQ3 SENSOR EN:"},
+{"K1 TIME 1 :   ","K2 TIME  :    ","CYCLE DECR  : ","PS PWR END  : ","WORK/STOP:    ","ERR TSA TEMP :","POW STAB EN:  "},
+{"K1 CYCLE 2:   ","STAB TIME:    ","RE PWR START: ","PS STOP TEMP: ","TEN FULL POW: ","TUO STAB TEMP:","SAVE SETTINGS "},
+{"K1 TIME 2 :   ","HEAD TIME:    ","RE PWR END  : ","MANUAL POWER: ","TEN R POW   : ","ZOOMER ENABLE:","EXIT          "}
 };
 // ДВУМЕРНЫЙ МАССИВ ТЕМПЕРАТУР КИПЕНИЯ СПИРТА(второй столбец) ПРИ АТМОСФЕРНОМ ДАВЛЕНИИ(первый столбец) (мм.рт.ст.)
 float alco_temps[68][2] =
@@ -171,7 +170,7 @@ digitalWrite(ZOOM_PIN, 1);                  // Выставляем высоки
 lcd.init();                                 // Инициализация дисплея
 lcd.backlight();                            // Подсветка дисплея
 lcd.blink();                                // Включаем блинк для заставки
-char line1[] = "BLACK BOX AUTO v5.2";       
+char line1[] = "BLACK BOX AUTO v6.1";       
 char line2[] = "....................";
 lcd.setCursor(0, 1);
   for (int i = 0; i < strlen(line1); i++) { lcd.print(line1[i]); delay(50); }
@@ -183,7 +182,7 @@ pinMode(BTN_PIN, INPUT_PULLUP);
 pinMode(PUMP_PIN, OUTPUT);
 pinMode(KL1_PIN, OUTPUT);
 pinMode(KL2_PIN, OUTPUT);
-pinMode(KL3_PIN, OUTPUT);
+//pinMode(KL3_PIN, OUTPUT); заменить на питание помпы!
 pinMode(CONT_PIN, OUTPUT);
 pinMode(S1_PIN, INPUT);
 pinMode(S2_PIN, INPUT);
@@ -209,12 +208,7 @@ delay(300);
 digitalWrite(KL2_PIN, 1);
 delay(300);
 digitalWrite(KL2_PIN, 0);
-delay(300);
-digitalWrite(KL3_PIN, 1);
-delay(300);
-digitalWrite(KL3_PIN, 0);
-delay(300);
-delay(1500);
+delay(2000);
 lcd.clear();
 server.begin();   // Стартуем http сервер
 // НАСТРОЙКА ЗАДАЧИ ДЛЯ CPU 0
@@ -251,34 +245,39 @@ if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В
   if (!is_set && !in_menu && !adv_disp) {err_disp = 1; }
   if (!is_set && !in_menu && !err_disp && adv_disp) { adv_disp = 0; }
   if (!is_set && in_menu){ ptr = constrain(ptr + 1, 0, 27); }
-
-     if (is_set && in_menu) {
+    if (is_set && in_menu) {
         if (ptr == 0)  {k1_per = constrain(k1_per + 1, 0, 120);}
-        if (ptr == 1)  {k1_per2 = constrain(k1_per2 + 1, 0, 120);}
-        if (ptr == 2)  {k1_time = constrain(k1_time + 50, 0, 5000);}
+        if (ptr == 1)  {k1_time = constrain(k1_time + 50, 0, 5000);}
+        if (ptr == 2)  {k1_per2 = constrain(k1_per2 + 1, 0, 120);}
         if (ptr == 3)  {k1_time2 = constrain(k1_time2 + 50, 0, 5000);}
+//
         if (ptr == 4)  {k2_per = constrain(k2_per + 1, 0, 120);}
-        if (ptr == 5)  {k3_per = constrain(k3_per + 1, 0, 120);}
-        if (ptr == 6)  {k2_time = constrain(k2_time + 50, 0, 5000);}
-        if (ptr == 7)  {k3_time = constrain(k3_time + 50, 0, 5000);}
-        if (ptr == 8)  {stab_time = constrain(stab_time + 1, 0, 60);}
-        if (ptr == 9)  {head_time = constrain(head_time + 1, 0, 240);}
-        if (ptr == 10)  {delt = constrain(delt + 0.01, 0, 2.0);}
-        if (ptr == 11)  {decr = constrain(decr + 50, 0, 1000);}
-        if (ptr == 12)  {re_pwr_start = constrain(re_pwr_start + 1, 0, 100);}
-        if (ptr == 13)  {re_pwr_end = constrain(re_pwr_end + 1, 0, 100);}
-        if (ptr == 14) {ps_pwr_start = constrain(ps_pwr_start + 1, 0, 100);}
-        if (ptr == 15) {ps_pwr_end = constrain(ps_pwr_end + 1, 0, 100);}
-        if (ptr == 16) {ps_stop_temp = constrain(ps_stop_temp + 1, 0, 100);}
-        if (ptr == 17) {mode = constrain(mode + 1, 1, 4);}
-        if (ptr == 18) {man_pwr = constrain(man_pwr + 1, 0, 100);}
-        if (ptr == 19) {start_stop = constrain(start_stop + 1, 0, 1);}
+        if (ptr == 5)  {k2_time = constrain(k2_time + 50, 0, 5000);}
+        if (ptr == 6)  {stab_time = constrain(stab_time + 1, 0, 60);}
+        if (ptr == 7)  {head_time = constrain(head_time + 1, 0, 240);}
+//
+        if (ptr == 8)  {delt = constrain(delt + 0.01, 0, 2.0);}
+        if (ptr == 9)  {decr = constrain(decr + 1, 0, 60);}
+        if (ptr == 10) {re_pwr_start = constrain(re_pwr_start + 1, 0, 100);}
+        if (ptr == 11) {re_pwr_end = constrain(re_pwr_end + 1, 0, 100);}
+//
+        if (ptr == 12) {ps_pwr_start = constrain(ps_pwr_start + 1, 0, 100);}
+        if (ptr == 13) {ps_pwr_end = constrain(ps_pwr_end + 1, 0, 100);}
+        if (ptr == 14) {ps_stop_temp = constrain(ps_stop_temp + 1, 0, 100);}
+        if (ptr == 15) {man_pwr = constrain(man_pwr + 1, 0, 100);}
+//
+        if (ptr == 16) {mode = constrain(mode + 1, 1, 4);}
+        if (ptr == 17) {start_stop = constrain(start_stop + 1, 0, 1);}
+        if (ptr == 18) {ten_init_pow = constrain(ten_init_pow + 100, 0, 5000);}
+        if (ptr == 19) {rpower = constrain(rpower + 1, 0, 100);}
+//
         if (ptr == 20) {fail_c = constrain(fail_c + 1, 0, 100);}
         if (ptr == 21) {fail_d = constrain(fail_d + 1, 0, 100);}
-        if (ptr == 22) {ten_init_pow = constrain(ten_init_pow + 10, 0, 3000);}
+        if (ptr == 22) {tuo_ref = constrain(tuo_ref + 1, 0, 100);}
         if (ptr == 23) {zoom_enable = constrain(zoom_enable + 1, 0, 1);}
+//
         if (ptr == 24) {mq3_enable = constrain(mq3_enable + 1, 0, 1);}
-        if (ptr == 25) {tuo_ref = constrain(tuo_ref + 1, 0, 100);}
+        if (ptr == 25) {pow_stab = constrain(pow_stab + 1, 0, 1);}
       }
 }
 if (enc.left()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (ВЛЕВО)
@@ -288,31 +287,37 @@ if (enc.left()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В�
 
      if (is_set && in_menu) {
         if (ptr == 0)  {k1_per = constrain(k1_per - 1, 0, 120);}
-        if (ptr == 1)  {k1_per2 = constrain(k1_per2 - 1, 0, 120);}
-        if (ptr == 2)  {k1_time = constrain(k1_time - 50, 0, 5000);}
+        if (ptr == 1)  {k1_time = constrain(k1_time - 50, 0, 5000);}
+        if (ptr == 2)  {k1_per2 = constrain(k1_per2 - 1, 0, 120);}
         if (ptr == 3)  {k1_time2 = constrain(k1_time2 - 50, 0, 5000);}
+//
         if (ptr == 4)  {k2_per = constrain(k2_per - 1, 0, 120);}
-        if (ptr == 5)  {k3_per = constrain(k3_per - 1, 0, 120);}
-        if (ptr == 6)  {k2_time = constrain(k2_time - 50, 0, 5000);}
-        if (ptr == 7)  {k3_time = constrain(k3_time - 50, 0, 5000);}
-        if (ptr == 8)  {stab_time = constrain(stab_time - 1, 0, 60);}
-        if (ptr == 9)  {head_time = constrain(head_time - 1, 0, 240);}
-        if (ptr == 10)  {delt = constrain(delt - 0.01, 0, 2.0);}
-        if (ptr == 11)  {decr = constrain(decr - 50, 0, 1000);}
-        if (ptr == 12)  {re_pwr_start = constrain(re_pwr_start - 1, 0, 100);}
-        if (ptr == 13)  {re_pwr_end = constrain(re_pwr_end - 1, 0, 100);}
-        if (ptr == 14) {ps_pwr_start = constrain(ps_pwr_start - 1, 0, 100);}
-        if (ptr == 15) {ps_pwr_end = constrain(ps_pwr_end - 1, 0, 100);}
-        if (ptr == 16) {ps_stop_temp = constrain(ps_stop_temp - 1, 0, 100);}
-        if (ptr == 17) {mode = constrain(mode - 1, 1, 4);}
-        if (ptr == 18) {man_pwr = constrain(man_pwr - 1, 0, 100);}
-        if (ptr == 19) {start_stop = constrain(start_stop - 1, 0, 1);}
+        if (ptr == 5)  {k2_time = constrain(k2_time - 50, 0, 5000);}
+        if (ptr == 6)  {stab_time = constrain(stab_time - 1, 0, 60);}
+        if (ptr == 7)  {head_time = constrain(head_time - 1, 0, 240);}
+//
+        if (ptr == 8)  {delt = constrain(delt - 0.01, 0, 2.0);}
+        if (ptr == 9)  {decr = constrain(decr - 1, 0, 60);}
+        if (ptr == 10) {re_pwr_start = constrain(re_pwr_start - 1, 0, 100);}
+        if (ptr == 11) {re_pwr_end = constrain(re_pwr_end - 1, 0, 100);}
+//
+        if (ptr == 12) {ps_pwr_start = constrain(ps_pwr_start - 1, 0, 100);}
+        if (ptr == 13) {ps_pwr_end = constrain(ps_pwr_end - 1, 0, 100);}
+        if (ptr == 14) {ps_stop_temp = constrain(ps_stop_temp - 1, 0, 100);}
+        if (ptr == 15) {man_pwr = constrain(man_pwr - 1, 0, 100);}
+//
+        if (ptr == 16) {mode = constrain(mode - 1, 1, 3);}
+        if (ptr == 17) {start_stop = constrain(start_stop - 1, 0, 1);}
+        if (ptr == 18) {ten_init_pow = constrain(ten_init_pow - 100, 0, 5000);}
+        if (ptr == 19) {rpower = constrain(rpower - 1, 0, 100);}
+//
         if (ptr == 20) {fail_c = constrain(fail_c - 1, 0, 100);}
         if (ptr == 21) {fail_d = constrain(fail_d - 1, 0, 100);}
-        if (ptr == 22) {ten_init_pow = constrain(ten_init_pow - 10, 0, 3000);}
+        if (ptr == 22) {tuo_ref = constrain(tuo_ref - 1, 0, 100);}
         if (ptr == 23) {zoom_enable = constrain(zoom_enable - 1, 0, 1);}
+//
         if (ptr == 24) {mq3_enable = constrain(mq3_enable - 1, 0, 1);}
-        if (ptr == 25) {tuo_ref = constrain(tuo_ref - 1, 0, 100);}
+        if (ptr == 25) {pow_stab = constrain(pow_stab - 1, 0, 1);}
       }
 }
 // ОБРАБОТЧИК НАЖАТИЯ КНОПКИ ЭНКОДЕРА
@@ -374,8 +379,8 @@ else { alarm_sim = 0; }
 // # # # # # # # # # # # # #
 // ОПИСАНИЕ РЕЖИМОВ ДЛЯ ДИСПЛЕЯ, СТАРТ/СТОП и ОШИБОК
 if (mode == 1) { mode_desc = "PSTILL";}
-if (mode == 2) { mode_desc = "REC2KL";}
-if (mode == 3) { mode_desc = "REC3KL";}
+if (mode == 2) { mode_desc = "RE_1KL";}
+if (mode == 3) { mode_desc = "RE_2KL";}
 if (mode == 4) { mode_desc = "MANUAL";}
 if (start_stop == 1) {start_desc = "WORK";}
 if (start_stop == 0) {start_desc = "STOP";}
@@ -430,19 +435,21 @@ if (start_stop) {            // регулируем мощность тольк
 digitalWrite(CONT_PIN, 1);   // включили контактор на ТЭН
 // Разгон до 75 градусов в кубе
 if (mode == 1 && cube_temp < 75 ) {
-  ten_pow = 100;
+  ten_pow = rpower;
   submode = "R"; }
 // Плавная регулировка в процессе
 if (mode == 1 && cube_temp >= 75) {
   ten_pow = map(cube_temp, 75, ps_stop_temp, ps_pwr_start, ps_pwr_end);
   submode = "P"; }
 // РЕЖИМЫ РЕКТИФИКАЦИИ. СТАРТ РЕГУЛИРОВКИ ПО ДОСТИЖЕНИЮ ТЕМПЕРАТУРЫ tuo_ref В УЗЛЕ ОТБОРА. САМА РЕГУЛИРОВКА ОТ ТЕМПЕРАТУРЫ В КУБЕ. 
-if ((mode == 2 || mode == 3) && uo_temp < tuo_ref) { ten_pow = 100; submode = "R";}
-if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref) { ten_pow = map(cube_temp, 80, 98, re_pwr_start, re_pwr_end); }
+if ((mode == 2 || mode == 3) && uo_temp < tuo_ref) { ten_pow = rpower; submode = "R";}
+if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref) { ten_pow = map(cube_temp, 80, 99, re_pwr_start, re_pwr_end); }
 // РУЧНОЙ РЕЖИМ
 if (mode == 4){ submode = "-";
 ten_pow = man_pwr; }
 // КОРРЕКЦИЯ МОЩНОСТИ
+
+if (pow_stab == 1) {
 // ВЫЧИСЛЯЕМ В ВАТТАХ ЗАДАННУЮ В % МОЩНОСТЬ
 float ten_init_f_pow = float(ten_init_pow);  // для результата с запятой нужно преобразование переменной
 watt_pow = (ten_init_f_pow / 100) * ten_pow;
@@ -455,16 +462,18 @@ ten_pow_calc = constrain(ten_pow + ten_pow_delt, 0, 100);        // Ограни
 // пишем в serial arduino Int число со значением задержки включения симистора из массива
 Serial2.print(power_array[ten_pow_calc] );
 // Arduino дальше само понимает и полностью выключает симистор при значении меньше 2%, и так же открывает полностью если выставлено 98%
+  }
 }// конец старт/стоп
 else { ten_pow = 0; Serial2.print(9100); // Если "STOP" то передаем минимальную мощность
   digitalWrite(CONT_PIN, 0);             // Отключаем контактор после выставления минимальной мощности. 
 }                                        // Таким образом контактор используется в щадащем режиме и исключает искру на контактах(кроме режима экстренного размыкания при прбое симистора). 
 }//КОНЕЦ ТАЙМЕРА УПРАВЛЕНИЯ МОЩНОСТЬЮ
+
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОСНОВНАЯ ЛОГИКА РАБОТЫ РЕЖИМОВ РЕКТИФИКАЦИИ
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // СТАБИЛИЗАЦИЯ
-// СЧЕТЧИК ВРЕМЕНИ РАБОТЫ ПРИ СТАБИЛИЗАЦИИ
+// СЧЕТЧИК ВРЕМЕНИ РАБОТЫ ПРИ СТАБИЛИЗАЦИИ RE_1KL, RE_2KL 
 static uint32_t tmr_stab;
 if (millis() - tmr_stab >= 1000) { tmr_stab = millis();
 if ((mode == 2 || mode == 3) && count_stab < (stab_time * 60) && uo_temp >= tuo_ref) { 
@@ -473,8 +482,8 @@ if ((mode == 2 || mode == 3) && count_stab < (stab_time * 60) && uo_temp >= tuo_
 }//КОНЕЦ РАБОТЫ СЧЕТЧИКА
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-// ОТБОР ГОЛОВ. ПОКА СЧЕТКИК НЕ ДОЙДЕТ ДО ЗАДАННОГО ВРЕМЕНИ
-if ((mode == 2 || mode == 3) && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head <= (head_time * 60)) {
+// ОТБОР ГОЛОВ RE_2KL, RE_1KL. ПОКА СЧЕТКИК НЕ ДОЙДЕТ ДО ЗАДАННОГО ВРЕМЕНИ
+if ((mode == 2 ) && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head <= (head_time * 60)) {
     submode = "H";                                                        // ИНДИКАЦИЯ "ОТБОР ГОЛОВ"
     digitalWrite(KL2_PIN, 0);                                             // Закрываем клапан отбора тела(если вдруг вернулись добрать головы в середине цикла работы клапана 2) 
 //СЧЕТЧИК ВРЕМЕНИ ОТБОРА
@@ -486,9 +495,29 @@ if (millis() - tmr_head >= 1000) { tmr_head = millis();
 kl1_work_cycle(); // РАБОТА КЛАПАНА 1
 }// КОНЕЦ РЕЖИМА ОТБОРА ГОЛОВ 
 
+
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+// ОТБОР ПРОДУКТА НА РЕЖИМЕ RE_1KL(1 КЛАПАН)
+if (mode == 2) {
+fix_temp(); // ФИКСАЦИЯ ТЕМПЕРАТУРЫ ОТБОРА И НАЧАЛЬНОГО ДАВЛЕНИЯ
+// Дальше работаем уже после фиксации температуры
+if (uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && tflag) {
+   submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА"
+static uint32_t tmr_body; // Счетчик времени отбора, для дисплея 
+if (millis() - tmr_body >= 1000) { 
+  tmr_body = millis(); 
+  count_body = count_body + 1; 
+  cnt_body = count_body / 60; }  
+check_tf();       //ПРОВЕРКА НА ЗАВЫШЕНИЕ ТЕМПЕРАТУРЫ 
+kl1_work_cycle2(); // РАБОТА КЛАПАНА ОТБОРА 1 по параметрам для второго цикла
+// нормальная остановка по исчерпанию окна открытия клапана отбора (несколько завышений температуры в зависимости от декремента и начальной скорости)
+if (k2_time < 50) { stop_proc(); err_desc = "NORMAL RE STOP";}
+ }
+} // КОНЕЦ РАБОТЫ ПО ОТБОРУ ПРОДУКТА НА РЕЖИМЕ RE_1KL
+
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОТБОР ПРОДУКТА НА РЕЖИМЕ RE_2KL(2 КЛАПАНА)
-if (mode == 2) {
+if (mode == 3) {
 fix_temp(); // ФИКСАЦИЯ ТЕМПЕРАТУРЫ ОТБОРА И НАЧАЛЬНОГО ДАВЛЕНИЯ
 // Дальше работаем уже после фиксации температуры
 if (uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && tflag) {
@@ -506,32 +535,6 @@ kl1_work_cycle2(); // РАБОТА КЛАПАНА ОТБОРА 1 СО СНИЖЕ
 if (k2_time < 50) { stop_proc(); err_desc = "NORMAL RE STOP";}
  }
 } // КОНЕЦ РАБОТЫ ПО ОТБОРУ ПРОДУКТА НА РЕЖИМЕ RE_2KL
-
-// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-// ОТБОР ПРОДУКТА НА РЕЖИМЕ RE_3KL (3 КЛАПАНА)
-if (mode == 3) {
-// Фиксируем температуру на момент окончания отбора голов в перемнной uo_temp_fix
-fix_temp(); // ФИКСАЦИЯ ТЕМПЕРАТУРЫ ОТБОРА И НАЧАЛЬНОГО ДАВЛЕНИЯ
-// Дальше работаем уже после фиксации температуры
-if (xflag_count < 1 && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && tflag) {
-   submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА"
-static uint32_t tmr_body; // Счетчик времени отбора, для дисплея 
-if (millis() - tmr_body >= 1000) { 
-  tmr_body = millis(); 
-  count_body = count_body + 1; 
-  cnt_body = count_body / 60; }
-kl2_work_cycle(); // РАБОТА КЛАПАНА ОТБОРА 2
-check_tf2(); //ПРОВЕРКА НА ЗАВЫШЕНИЕ ТЕМПЕРАТУРЫ 
-// отбор голов из царги пастеризации в процессе отбора тела 
-kl1_work_cycle2(); // РАБОТА КЛАПАНА ОТБОРА 1 СО СНИЖЕНИЕМ СКОРОСТИ ОТБОРА
-// ПЕРЕКЛЮЧЕНИЕ КЛАПАНА ОТБОРА НА ТРЕТИЙ ПОСЛЕ ПЕРВОГО ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ
-if (xflag_count > 0 && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && tflag) {
-   submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА 2"
-kl3_work_cycle(); }
-// нормальная остановка по исчерпанию окна открытия клапана отбора (несколько завышений температуры в зависимости от декремента)
-if (k3_time < 50) { stop_proc(); err_desc = "NORMAL RE STOP";}
-  } 
-}// КОНЕЦ РАБОТЫ ПО ОТБОРУ ПРОДУКТА НА РЕЖИМЕ RE_3KL
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // УПРАВЛЕНИЕ ПОМПОЙ НА РАЗНЫХ РЕЖИМАХ
@@ -584,7 +587,7 @@ else {digitalWrite(2,0);}
 
 /// ФУНКЦИИ
 void main_screen() {    // Основной экран
-  lcd.noBlink();
+lcd.noBlink();
   // Вывод температуры куба
 lcd.setCursor(0,0); lcd.print("Tc:");
 lcd.setCursor(3,0); lcd.print(cube_temp); lcd.write(223); lcd.print(" ");
@@ -620,94 +623,96 @@ lcd.setCursor(16,2); lcd.print(start_desc);
 
 void menu_screen() { // Меню настроек, постраничный вывод в зависимости от указателя ptr который меняем поворотами энкодера
 lcd.noBlink();
+// PAGE1
 if (ptr < 4) {
 mprint(0);
-pprint(ptr);
+pprint(ptr); // сдвиг вывода для указателя
 lcd.setCursor(15,0); lcd.print("    s");
 lcd.setCursor(15,0); lcd.print(k1_per);
-lcd.setCursor(15,1); lcd.print("    s");
-lcd.setCursor(15,1); lcd.print(k1_per2);
-lcd.setCursor(14,2); lcd.print("    ms");
-lcd.setCursor(14,2); lcd.print(k1_time);
-lcd.setCursor(14,3); lcd.print("    ms");
-lcd.setCursor(14,3); lcd.print(k1_time2);
+lcd.setCursor(15,1); lcd.print("   ms");
+lcd.setCursor(15,1); lcd.print(k1_time);
+lcd.setCursor(15,2); lcd.print("    s");
+lcd.setCursor(15,2); lcd.print(k1_per2);
+lcd.setCursor(15,3); lcd.print("   ms");
+lcd.setCursor(15,3); lcd.print(k1_time2);
 }
+// PAGE2
 if (ptr > 3 && ptr < 8) {
 mprint(1);
-pprint(ptr - 4);
+pprint(ptr - 4); // сдвиг вывода для указателя
 lcd.setCursor(15,0); lcd.print("    s");
 lcd.setCursor(15,0); lcd.print(k2_per);
-lcd.setCursor(15,1); lcd.print("    s");
-lcd.setCursor(15,1); lcd.print(k3_per);
-lcd.setCursor(14,2); lcd.print("    ms");
-lcd.setCursor(14,2); lcd.print(k2_time);
-lcd.setCursor(14,3); lcd.print("    ms");
-lcd.setCursor(14,3); lcd.print(k3_time);
+lcd.setCursor(15,1); lcd.print("   ms");
+lcd.setCursor(15,1); lcd.print(k2_time);
+lcd.setCursor(15,2); lcd.print("    m");
+lcd.setCursor(15,2); lcd.print(stab_time);
+lcd.setCursor(15,3); lcd.print("    m");
+lcd.setCursor(15,3); lcd.print(head_time);
 }
+// PAGE3
 if (ptr > 7 && ptr < 12) {
 mprint(2);
 pprint(ptr - 8); // сдвиг вывода для указателя
-lcd.setCursor(15,0); lcd.print("    m");
-lcd.setCursor(15,0); lcd.print(stab_time);
-lcd.setCursor(15,1); lcd.print("    m");
-lcd.setCursor(15,1); lcd.print(head_time);
-lcd.setCursor(15,2); lcd.print("    ");
-lcd.setCursor(19,2); lcd.write(223);
-lcd.setCursor(15,2); lcd.print(delt);
-lcd.setCursor(14,3); lcd.print("   ms");
-lcd.setCursor(14,3); lcd.print(decr);
+lcd.setCursor(15,0); lcd.print("     ");
+lcd.setCursor(15,0); lcd.print(delt); lcd.write(223);
+lcd.setCursor(15,1); lcd.print("    s");
+lcd.setCursor(15,1); lcd.print(decr);
+lcd.setCursor(15,2); lcd.print("    %");
+lcd.setCursor(15,2); lcd.print(re_pwr_start);
+lcd.setCursor(15,3); lcd.print("    %");
+lcd.setCursor(15,3); lcd.print(re_pwr_end);
 }
+// PAGE4
 if (ptr > 11 && ptr < 16) {
 mprint(3);
-pprint(ptr - 12);
+pprint(ptr - 12); // сдвиг вывода для указателя
 lcd.setCursor(15,0); lcd.print("    %");
-lcd.setCursor(15,0); lcd.print(re_pwr_start);
+lcd.setCursor(15,0); lcd.print(ps_pwr_start);
 lcd.setCursor(15,1); lcd.print("    %");
-lcd.setCursor(15,1); lcd.print(re_pwr_end);
-lcd.setCursor(15,2); lcd.print("    %");
-lcd.setCursor(15,2); lcd.print(ps_pwr_start);
+lcd.setCursor(15,1); lcd.print(ps_pwr_end);
+lcd.setCursor(15,2); lcd.print("     ");
+lcd.setCursor(15,2); lcd.print(ps_stop_temp); lcd.write(223);
 lcd.setCursor(15,3); lcd.print("    %");
-lcd.setCursor(15,3); lcd.print(ps_pwr_end);
+lcd.setCursor(15,3); lcd.print(man_pwr);
 }
+// PAGE5
 if (ptr > 15 && ptr < 20) {
 mprint(4);
-pprint(ptr - 16);
-lcd.setCursor(15,0); lcd.print("     ");
-lcd.setCursor(19,0); lcd.write(223);
-lcd.setCursor(15,0); lcd.print(ps_stop_temp);
-lcd.setCursor(14,1); lcd.print(mode_desc);
-lcd.setCursor(15,2); lcd.print("    %");
-lcd.setCursor(15,2); lcd.print(man_pwr);
-lcd.setCursor(15,3); lcd.print("     ");
-lcd.setCursor(15,3); lcd.print(start_desc);
+pprint(ptr - 16); // сдвиг вывода для указателя
+lcd.setCursor(14,0); lcd.print("     ");
+lcd.setCursor(14,0); lcd.print(mode_desc);
+lcd.setCursor(15,1); lcd.print("     ");
+lcd.setCursor(15,1); lcd.print(start_desc);
+lcd.setCursor(15,2); lcd.print("     ");
+lcd.setCursor(15,2); lcd.print(ten_init_pow); lcd.print("W");
+lcd.setCursor(15,3); lcd.print("    %");
+lcd.setCursor(15,3); lcd.print(rpower);
 }
+// PAGE6
 if (ptr > 19 && ptr < 24) {
 mprint(5);
-pprint(ptr - 20);
+pprint(ptr - 20); // сдвиг вывода для указателя
 lcd.setCursor(15,0); lcd.print("     ");
-lcd.setCursor(19,0); lcd.write(223);
-lcd.setCursor(15,0); lcd.print(fail_c);
+lcd.setCursor(16,0); lcd.print(fail_c); lcd.write(223);
 lcd.setCursor(15,1); lcd.print("     ");
-lcd.setCursor(19,1); lcd.write(223);
-lcd.setCursor(15,1); lcd.print(fail_d);
+lcd.setCursor(16,1); lcd.print(fail_d); lcd.write(223);
 lcd.setCursor(15,2); lcd.print("     ");
-lcd.setCursor(15,2); lcd.print(ten_init_pow);
+lcd.setCursor(16,2); lcd.print(tuo_ref); lcd.write(223);
 lcd.setCursor(15,3); lcd.print("     ");
-lcd.setCursor(15,3); lcd.print(zoom_enable); 
+lcd.setCursor(17,3); lcd.print(zoom_enable); 
   }
+// PAGE7
 if (ptr > 23 && ptr < 28) {
 mprint(6);
-pprint(ptr - 24);
+pprint(ptr - 24); // сдвиг вывода для указателя
 lcd.setCursor(15,0); lcd.print("     ");
-lcd.setCursor(15,0); lcd.print(mq3_enable);
+lcd.setCursor(17,0); lcd.print(mq3_enable);
 lcd.setCursor(15,1); lcd.print("     ");
-lcd.setCursor(15,1); lcd.print(tuo_ref); lcd.write(223);
+lcd.setCursor(17,1); lcd.print(pow_stab);
 lcd.setCursor(15,2); lcd.print("     ");
 lcd.setCursor(15,3); lcd.print("     ");  
   }
-
 }
-
 // ЭКРАН ДОП ПАРАМЕТРОВ
 void disp_advanced() {
 // Напряжение сети
@@ -736,7 +741,7 @@ lcd.setCursor(10,3); lcd.print("Prf:      ");
 lcd.setCursor(14,3);lcd.print(int(watt_pow));
 }
 
-// РАБОТА ПЕРВОГО КЛАПАНА
+// РАБОТА ПЕРВОГО КЛАПАНА НА РЕЖИМЕ R1_KL и R2_KL ПРИ ОТБОРЕ ГОЛОВ
 void kl1_work_cycle() {
 static uint32_t tmr_kl1_head; 
 if (millis() - tmr_kl1_head >= (k1_per * 1000)) { // РАБОТА КЛАПАНА ОТБОРА
@@ -745,7 +750,7 @@ if (millis() - tmr_kl1_head >= (k1_per * 1000)) { // РАБОТА КЛАПАНА
 if (millis() - tmr_kl1_head >= k1_time) {  // Закрыли клапан 1 по времени kl1time в % от периода
     digitalWrite(KL1_PIN, 0); }
 }
-//РАБОТА ВТОРОГО КЛАПАНА
+//РАБОТА ВТОРОГО КЛАПАНА НА РЕЖИМЕ R2_KL, ОТБОР ТЕЛА
 void kl2_work_cycle() {
 static uint32_t tmr_kl2_body;
 if ((millis() - tmr_kl2_body >= (k2_per * 1000)) && (uo_temp < (uo_temp_fix + delt))) {
@@ -755,16 +760,8 @@ if ((millis() - tmr_kl2_body >= (k2_per * 1000)) && (uo_temp < (uo_temp_fix + de
 if (millis() - tmr_kl2_body >= k2_time) {  // Закрыли клапан 2 по времени k2time в % от периода
     digitalWrite(KL2_PIN, 0);}
 }
-// РАБОТА ТРЕТЬЕГО КЛАПАНА 
-void kl3_work_cycle() {
-static uint32_t tmr_kl2_b2; 
-if (millis() - tmr_kl2_b2 >= (k3_per * 1000)) {
-    tmr_kl2_b2 = millis();
-    digitalWrite(KL3_PIN, 1); }
-if (millis() - tmr_kl2_b2 >= k3_time) {  // Закрыли клапан по времени в половину от заданного на отборе голов
-    digitalWrite(KL3_PIN, 0); }
-}
-// РАБОТА ПЕРВОГО КЛАПАНА В РЕЖИМЕ ДОБОРА ГОЛОВ В ПРОЦЕССЕ ОТБОРА ТЕЛА
+
+// РАБОТА ПЕРВОГО КЛАПАНА В РЕЖИМЕ ДОБОРА ГОЛОВ НА RE_2KL, ИЛИ ОТБОР ТЕЛА ПРИ R1_KL
 void kl1_work_cycle2() {
   static uint32_t tmr_kl1_past; 
 if (millis() - tmr_kl1_past >= (k1_per2 * 1000)) {
@@ -773,21 +770,16 @@ if (millis() - tmr_kl1_past >= (k1_per2 * 1000)) {
 if (millis() - tmr_kl1_past >= k1_time2) {  // Закрыли клапан по времени в половину от заданного на отборе голов
     digitalWrite(KL1_PIN, 0); }
 }
-// ПРОЦЕРКА НА ЗАВЫШЕНИЕ ФИКСИРОВАННОЙ ТЕМПЕРАТУРЫ
+// ПРОВЕРКА НА ЗАВЫШЕНИЕ ФИКСИРОВАННОЙ ТЕМПЕРАТУРЫ
 void check_tf(){
 // если температура зашла выше uo_temp_fix + delt, убавляем скорость отбора, ставим флаг завышения, увеличиваем счетчик завышений.
 if ((uo_temp >= (uo_temp_fix + delt)) && !xflag) {
-  k2_time = k2_time - decr;
+  k2_per = k2_per + decr;
+  k1_per = k1_per + decr;
   xflag = 1;
   xflag_count = xflag_count + 1; }
 }
-void check_tf2(){
-// если температура зашла выше uo_temp_fix + delt, убавляем скорость отбора, ставим флаг завышения, увеличиваем счетчик завышений.
-if ((uo_temp >= (uo_temp_fix + delt)) && !xflag) {
-  k3_time = k3_time - decr;
-  xflag = 1;
-  xflag_count = xflag_count + 1; }
-}
+
 // ВЫЧИСЛЯЕМ ДЕЛЬТУ ПО ТЕМПЕРАТУРЕ С ИЗМЕНЕНИЕМ АТМ ДАВЛЕНИЯ
 void calc_delta() {
 // Если датчик давления полностью исправен то вычисляем дельту по температуре и корректируем fix температуру в УО/ЦАРГЕ.
@@ -819,7 +811,7 @@ if (client) {                                // Если есть клиентс
 html_page = "";
 html_page = html_page + "<!DOCTYPE html><html translate=\"no\">";
 html_page = html_page + "<head><title>SamWeb</title></head>";
-html_page = html_page + "<body><h2>AUTOMATION Web Server</h2>";
+html_page = html_page + "<body><h2>AUTOMATION WEB SERVER V6</h2>";
 html_page = html_page + "<table border=\"1\" cellspacing=\"1\" cellpadding=\"0\">";
 html_page = html_page + "<tr><th> Parameter </th><th> Value </th><th> Measure </th></tr>";
 html_page = html_page + "<tr><td>Mode</td><td align=\"center\">" + mode_desc + "</td><td align=\"center\">" + submode + "</td></tr>";
@@ -835,21 +827,21 @@ html_page = html_page + "<tr><td>K1 Cycle 2</td><td align=\"center\">" + String(
 html_page = html_page + "<tr><td>K1 Time 2</td><td align=\"center\">" + String(k1_time2) + "</td><td align=\"center\"> ms </td></tr>";
 html_page = html_page + "<tr><td>K2 Cycle</td><td align=\"center\">" + String(k2_per) + "</td><td align=\"center\"> sec </td></tr>";
 html_page = html_page + "<tr><td>K2 Time</td><td align=\"center\">" + String(k2_time) + "</td><td align=\"center\"> ms </td></tr>";
-html_page = html_page + "<tr><td>K3 Cycle</td><td align=\"center\">" + String(k3_per) + "</td><td align=\"center\"> sec </td></tr>";
-html_page = html_page + "<tr><td>K3 Time</td><td align=\"center\">" + String(k3_time) + "</td><td align=\"center\"> ms </td></tr>";
 html_page = html_page + "<tr><td>Stab Time</td><td align=\"center\">" + String(stab_time) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Head Time</td><td align=\"center\">" + String(head_time) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Delta T</td><td align=\"center\">" + String(delt) + "</td><td align=\"center\">&#176C</td></tr>";
 html_page = html_page + "<tr><td>Decrement K2</td><td align=\"center\">" + String(decr) + "</td><td align=\"center\"> ms </td></tr>";
+html_page = html_page + "<tr><td>Stab Enable</td><td align=\"center\">" + String(pow_stab) + "</td><td align=\"center\"> Wt </td></tr>";
 html_page = html_page + "<tr><td>Temp over-delta</td><td align=\"center\">" + String(xflag_count) + "</td><td align=\"center\"> - </td></tr>";
 html_page = html_page + "<tr><td>Spent Stab</td><td align=\"center\">" + String(cnt_stab) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Spent Head</td><td align=\"center\">" + String(cnt_head) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Spent Main</td><td align=\"center\">" + String(cnt_body) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Atm.pressure</td><td align=\"center\">" + String(bmp_press) + "</td><td align=\"center\"> mm rt.st. </td></tr>";
+html_page = html_page + "<tr><td>Razgon Power</td><td align=\"center\">" + String(rpower) + "</td><td align=\"center\"> % </td></tr>";
 html_page = html_page + "<tr><td>Power</td><td align=\"center\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
 html_page = html_page + "<tr><td>Voltage</td><td align=\"center\">" + String(voltage) + "</td><td align=\"center\"> V </td></tr>";
 html_page = html_page + "<tr><td>Current</td><td align=\"center\">" + String(current) + "</td><td align=\"center\"> A </td></tr>";
-html_page = html_page + "<tr><td>Energy</td><td align=\"center\">" + String(energy) + "</td><td align=\"center\"> kWt h </td></tr>";
+html_page = html_page + "<tr><td>Energy</td><td align=\"center\">" + String(energy) + "</td><td align=\"center\"> kWt*h </td></tr>";
 html_page = html_page + "</table>";
 html_page = html_page + "</body></html>";
 client.println(html_page);                     // выдем страницу клиенту
@@ -908,8 +900,8 @@ if (EEPROM.readInt(64) != ten_init_pow) { EEPROM.writeInt(64, ten_init_pow); }
 if (EEPROM.readInt(68) != tuo_ref)      { EEPROM.writeInt(68, tuo_ref); }
 if (EEPROM.readInt(72) != k1_per2)      { EEPROM.writeInt(72, k1_per2); }
 if (EEPROM.readInt(76) != k1_time2)      { EEPROM.writeInt(76, k1_time2); }
-if (EEPROM.readInt(80) != k3_per)      { EEPROM.writeInt(80, k3_per); }
-if (EEPROM.readInt(84) != k3_time)      { EEPROM.writeInt(84, k3_time); }
+if (EEPROM.readInt(80) != rpower)      { EEPROM.writeInt(80, rpower); }
+if (EEPROM.readInt(84) != pow_stab)      { EEPROM.writeInt(84, pow_stab); }
 EEPROM.commit();              // Обязательно COMMIT в память
 //БИПАЕМ ЗУМЕРОМ 
 digitalWrite(ZOOM_PIN, 0);
@@ -944,8 +936,8 @@ if (EEPROM.readInt(68) <= 0) {tuo_ref = 73; }
 else {tuo_ref = EEPROM.readInt(68); }
 k1_per2 = EEPROM.readInt(72);
 k1_time2 = EEPROM.readInt(76);
-k3_per = EEPROM.readInt(80);
-k3_time = EEPROM.readInt(84);
+rpower = EEPROM.readInt(80);
+pow_stab = EEPROM.readInt(84);
 }
 
 //ПОИСК ТЕМПЕРАТУРЫ КИПЕНИЯ СПИРТА ПО МАССИВУ И АТМ ДАВЛЕНИЮ. В Arduino IDE нет словарей, 

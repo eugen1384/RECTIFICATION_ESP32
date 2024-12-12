@@ -11,4 +11,56 @@ TO DO:
 Либо доделать корректировку по давлению! Она нужна 100%.
 Починить включение помпы. Добавить транзистор на вывод PUMP_EN ESP32. Проверить связку с NANO охладителя. 
 
+7. Добавить режим ректификации для 1 клапана
+6. Питание помпы взять с разъема третьего клапана!
+
+
+Структура меню настроек
+
+
+K1 CYCLE 1
+K1 TIME 1
+K1 CYCLE 2
+K1 TIME 2
+
+K2 CYCLE
+K2 TIME
+STAB TIME
+HEAD TIME
+
+DELTA
+DECREMENT
+RE PWR START
+RE PWR END
+
+PS PWR START
+PS PWR END
+PS STOP TEMP
+MANUAL POWER
+
+MODE
+WORK/STOP
+TEN FULL POW
+TEN R POW %
+
+ERR CUBE TEMP
+ERR TSA TEMP
+TUO STAB TEMP
+ZOOMER ENABLE
+
+MQ3 SENSOR EN
+POW STAB EN (включить/выключить стабилизацию мощности)
+SAVE SETTINGS
+EXIT
+
+
+
+
+
+
+
+
+
+
+
 
