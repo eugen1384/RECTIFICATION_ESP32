@@ -97,6 +97,7 @@ int ptr;                // УКАЗАТЕЛЬ В МЕНЮ УСТАНОВОК
 int start_stop = 0;     // ФЛАГ СТАРТ/СТОП
 int fail_c = 99;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. КУБА 
 int fail_d = 55;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. ДЕФЛЕГМАТОРА
+int sim_fail_temp = 65;  // ПРЕДЕЛЬНАЯ ТЕМПЕРАТУРА СИМИСТОРА
 int ps_stop_temp;       // ТЕМПЕРАТУРА ОСТАНОВКИ НА POTSTILL
 int zoom_per = 500;     // ПЕРИОД ЗУМЕРА МС (500 DEFAULT)
 int alarm_counter = 0;  // СЧЕТЧИК СЕКУНД ПРЕДУПРЕЖДЕНИЯ ОБ АВАРИИ ПЕРЕД ОТКЛЮЧЕНИЕМ
@@ -132,10 +133,10 @@ String err_desc;        // СТРОКА ОШИБКИ
 // ДВУМЕРНЫЙ МАССИВ СТРОК МЕНЮ УСТАНОВОК. РАЗБИТ ПО ЭКРАНАМ(СТОЛБЦЫ)
 String menu_settings[4][7] = 
 {
-{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA       : ","PS PWR START: ","MODE     :   ", "ERR CUBE TEMP:","MQ3 SENSOR EN:"},
-{"K1 TIME 1 :   ","K2 TIME  :    ","CYCLE DECR  : ","PS PWR END  : ","WORK/STOP:    ","ERR TSA TEMP :","POW STAB EN:  "},
+{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA T     : ","PS PWR START: ","MODE     :   ", "ERR CUBE TEMP:","MQ3 SENSOR EN:"},
+{"K1 TIME  1:   ","K2 TIME  :    ","DECREMENT   : ","PS PWR END  : ","WORK/STOP:    ","ERR TSA TEMP :","POW STAB EN  :"},
 {"K1 CYCLE 2:   ","STAB TIME:    ","RE PWR START: ","PS STOP TEMP: ","TEN FULL POW: ","TUO STAB TEMP:","SAVE SETTINGS "},
-{"K1 TIME 2 :   ","HEAD TIME:    ","RE PWR END  : ","MANUAL POWER: ","TEN R POW   : ","ZOOMER ENABLE:","EXIT          "}
+{"K1 TIME  2:   ","HEAD TIME:    ","RE PWR END  : ","MANUAL POWER: ","TEN RAZG POW: ","ZOOMER ENABLE:","EXIT          "}
 };
 // ДВУМЕРНЫЙ МАССИВ ТЕМПЕРАТУР КИПЕНИЯ СПИРТА(второй столбец) ПРИ АТМОСФЕРНОМ ДАВЛЕНИИ(первый столбец) (мм.рт.ст.)
 float alco_temps[68][2] =
@@ -184,7 +185,6 @@ pinMode(BTN_PIN, INPUT_PULLUP);
 pinMode(PUMP_PIN, OUTPUT);
 pinMode(KL1_PIN, OUTPUT);
 pinMode(KL2_PIN, OUTPUT);
-//pinMode(KL3_PIN, OUTPUT); заменить на питание помпы!
 pinMode(CONT_PIN, OUTPUT);
 pinMode(S1_PIN, INPUT);
 pinMode(S2_PIN, INPUT);
@@ -246,7 +246,8 @@ void loop() {
 if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (ВПРАВО)
   if (!is_set && !in_menu && !adv_disp) {err_disp = 1; }
   if (!is_set && !in_menu && !err_disp && adv_disp) { adv_disp = 0; }
-  if (!is_set && in_menu){ ptr = constrain(ptr + 1, 0, 27); }
+  if (!is_set && in_menu){ ptr = constrain(ptr + 1, 0, 28); }
+    if (ptr > 27) {ptr = 0;} // циклическая прокрутка
     if (is_set && in_menu) {
         if (ptr == 0)  {k1_per = constrain(k1_per + 1, 0, 120);}
         if (ptr == 1)  {k1_time = constrain(k1_time + 50, 0, 5000);}
@@ -285,8 +286,8 @@ if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В
 if (enc.left()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (ВЛЕВО)
   if (!is_set && !in_menu && !err_disp) { adv_disp = 1; }
   if (!is_set && !in_menu) {err_disp = 0; }
-  if (!is_set && in_menu){ ptr = constrain(ptr - 1, 0, 27); }
-
+  if (!is_set && in_menu){ ptr = constrain(ptr - 1, -1, 27); }
+     if (ptr < 0) {ptr = 27;} // циклическая прокрутка
      if (is_set && in_menu) {
         if (ptr == 0)  {k1_per = constrain(k1_per - 1, 0, 120);}
         if (ptr == 1)  {k1_time = constrain(k1_time - 50, 0, 5000);}
@@ -374,7 +375,7 @@ else { alarm_mq3 = 0; }
   }
 if (!mq3_enable) {alarm_mq3 = 0;}
 // ОБРАБОТКА ПЕРЕГРЕВА СИМИСТОРА
-if (sim_temp > 55) { alarm_sim = 1;
+if (sim_temp > sim_fail_temp) { alarm_sim = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
 else { alarm_sim = 0; }
 
@@ -490,7 +491,7 @@ if ((mode == 2 || mode == 3) && count_stab < (stab_time * 60) && uo_temp >= tuo_
 // ОТБОР ГОЛОВ RE_2KL, RE_1KL. ПОКА СЧЕТКИК НЕ ДОЙДЕТ ДО ЗАДАННОГО ВРЕМЕНИ
 if ((mode == 2 ) && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head <= (head_time * 60)) {
     submode = "H";                                                        // ИНДИКАЦИЯ "ОТБОР ГОЛОВ"
-    digitalWrite(KL2_PIN, 0);                                             // Закрываем клапан отбора тела(если вдруг вернулись добрать головы в середине цикла работы клапана 2) 
+    digitalWrite(KL2_PIN, 0);                                             // Закрываем клапан 2 
 //СЧЕТЧИК ВРЕМЕНИ ОТБОРА
 static uint32_t tmr_head;
 if (millis() - tmr_head >= 1000) { tmr_head = millis();
@@ -791,7 +792,8 @@ if ((uo_temp >= (uo_temp_fix + delt)) && !xflag) {
 void calc_delta() {
 // Если датчик давления полностью исправен то вычисляем дельту по температуре и корректируем fix температуру в УО/ЦАРГЕ.
 // шаг изменения температуры кипения спирта 0.038 градуса Цельсия на 1 мм рт ст. Зависимость линейная. 
-if (!bmp_err && bmp_press > 712 && bmp_press < 781) {  // Адекватные пределы давления на случай если датчик откажет в процесс (покажет 140) 
+if (!bmp_err && bmp_press > 712 && bmp_press < 781 && uo_temp_fix > 0) {  // Адекватные пределы давления на случай если датчик откажет в процесс (покажет 140), 
+// и проверка условия наличия не нулевого значения в переменной uo_temp_fix
   press_curr = float(bmp_press);
   press_delta = press_init - press_curr;
   uo_temp_fix = uo_temp_fix + (press_delta * 0.038);
