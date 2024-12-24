@@ -1,7 +1,7 @@
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // БИБЛИОТЕКИ
 #include <LiquidCrystal_I2C.h>     // LCD Display
-#include <microDS18B20.h>          // DS18B20(Gyver)
+#include <GyverDS18.h>             // GyverDS18 v1.1.2 DS18B20 Temp Sensor lib
 #include <EncButton.h>             // Encoder
 #include <EEPROM.h>                // EEPROM память
 #include <WiFi.h>                  // Wi-Fi модуль
@@ -41,10 +41,11 @@ PZEM004Tv30 pzem(PZEM_SERIAL, PZEM_RX_PIN, PZEM_TX_PIN);  // Измерител�
 EncButton<EB_TICK, S1_PIN, S2_PIN, BTN_PIN> enc;          // Энкодер 
 Adafruit_BMP085 bmp;                                      // Датчик атмосферного давления
 // DS18B20 ТЕРМО ДАТЧИКИ
-MicroDS18B20<TC_PIN> sensor_cube; // куб
-MicroDS18B20<TUO_PIN> sensor_out; // узел отбора/царга
-MicroDS18B20<TD_PIN> sensor_defl; // ТСА, или дефлегматор
-MicroDS18B20<TS_PIN> sensor_sim;  // симистор
+GyverDS18Single sensor_cube(TC_PIN); // куб
+GyverDS18Single sensor_out(TUO_PIN); // узел отбора/царга
+GyverDS18Single sensor_defl(TD_PIN); // ТСА, или дефлегматор
+GyverDS18Single sensor_sim(TS_PIN);  // симистор
+
 // ОПИСЫВАЕМ ЗАДАЧУ ДЛЯ CPU 0
 TaskHandle_t Task1;
 // ПЕРМЕННЫЕ ПО ТИПАМ
@@ -243,6 +244,27 @@ pzem.resetEnergy();                         // Сброс счетчика эн�
 // ОСНОВНОЙ ЦИКЛ
 void loop() {
 
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+// ПОЛУЧЕНИЕ ТЕМПЕРАТУР И ДАВЛЕНИЯ С ДАТЧИКОВ
+static uint32_t tmr_temp;
+if (millis() - tmr_temp >= 1000) {
+tmr_temp = millis();
+if (sensor_cube.readTemp()) { cube_temp = sensor_cube.getTemp(); sensor_cube.requestTemp(); }
+else { sensor_cube.requestTemp(); }
+if (sensor_defl.readTemp()) { defl_temp = sensor_defl.getTemp(); sensor_defl.requestTemp(); }
+else { sensor_defl.requestTemp(); }
+if (sensor_out.readTemp()) { uo_temp = sensor_out.getTemp(); sensor_out.requestTemp(); }
+else { sensor_out.requestTemp(); }
+if (sensor_sim.readTemp()) { sim_temp = sensor_sim.getTemp(); sensor_sim.requestTemp(); }
+else { sensor_sim.requestTemp(); }
+
+if (!bmp_err) { bmp_press = bmp.readPressure() * 0.00750062;}   // получаем давление в Па и переводим в мм ртутного столба
+else { bmp_press = 0; }
+// получаем температуру кипения спирта при текущем атм давлении. Пока только для сравнения, 
+// сама поправка вычисляется при ректификации от фиксированной температуры 
+get_temp_atm();
+}// КОНЕЦ ОПРОСА ДАТЧИКОВ
+
 if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (ВПРАВО)
   if (!is_set && !in_menu && !adv_disp) {err_disp = 1; }
   if (!is_set && !in_menu && !err_disp && adv_disp) { adv_disp = 0; }
@@ -360,11 +382,11 @@ alarm_counter = alarm_counter + 1; }
 // ОБНУЛЯЕМ СЧЕТЧИК ЕСЛИ АВАРИЯ УШЛА ДО ТАЙМАУТА
 if (!alarm_all) { alarm_counter = 0; }  
 // ОБРАБОТКА ПЕРЕГРЕВА TSA
-if (defl_temp > fail_d) { alarm_tsa = 1;
+if (int(defl_temp) >= fail_d) { alarm_tsa = 1;
   if (alarm_counter >= 120) {stop_proc(); } }
 else { alarm_tsa = 0; }
 // ОБРАБОТКА ПЕРЕГРЕВА КУБА
-if (cube_temp > fail_c) { alarm_cube = 1;
+if (int(cube_temp) >= fail_c) { alarm_cube = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
 else { alarm_cube = 0; }
 // ОБРАБОТКА ДАТЧИКА ПАРОВ MQ3
@@ -373,7 +395,6 @@ if (mq3_enable) {
     if (alarm_counter >= 120) { stop_proc(); } }
 else { alarm_mq3 = 0; }
   }
-if (!mq3_enable) {alarm_mq3 = 0;}
 // ОБРАБОТКА ПЕРЕГРЕВА СИМИСТОРА
 if (sim_temp > sim_fail_temp) { alarm_sim = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
@@ -392,26 +413,6 @@ if (alarm_tsa)   {err_desc = "ERR TSA TEMP  ";}
 if (alarm_sim)   {err_desc = "ERR SIM TEMP  ";}
 if (alarm_mq3)   {err_desc = "ERR MQ3 ALCO  ";}
 if (alarm_power) {err_desc = "ERR POWER SET ";}
-
-// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-// ПОЛУЧЕНИЕ ТЕМПЕРАТУР И ДАВЛЕНИЯ С ДАТЧИКОВ
-static uint32_t tmr_temp;
-if (millis() - tmr_temp >= 1000) {
-  tmr_temp = millis();
-if (sensor_cube.readTemp()) { cube_temp = sensor_cube.getTemp(); sensor_cube.requestTemp(); }
-else { sensor_cube.requestTemp(); }
-if (sensor_defl.readTemp()) { defl_temp = sensor_defl.getTemp(); sensor_defl.requestTemp(); }
-else { sensor_defl.requestTemp(); }
-if (sensor_out.readTemp()) { uo_temp = sensor_out.getTemp(); sensor_out.requestTemp(); }
-else { sensor_out.requestTemp(); }
-if (sensor_sim.readTemp()) { sim_temp = sensor_sim.getTemp(); sensor_sim.requestTemp(); }
-else { sensor_sim.requestTemp(); }
-if (!bmp_err) { bmp_press = bmp.readPressure() * 0.00750062;}   // получаем давление в Па и переводим в мм ртутного столба
-else { bmp_press = 0; }
-// получаем температуру кипения спирта при текущем атм давлении. Пока только для сравнения, 
-// сама поправка вычисляется при ректификации от фиксированной температуры 
-get_temp_atm();
-}// КОНЕЦ ОПРОСА ДАТЧИКОВ
 
 // Опрос PZEM-004 по Serial 0, быстрее чем раз в 1 сек не отадет изменения
 static uint32_t tmr_pzem;
@@ -914,9 +915,9 @@ if (EEPROM.readInt(60) != fail_d)       { EEPROM.writeInt(60, fail_d); }
 if (EEPROM.readInt(64) != ten_init_pow) { EEPROM.writeInt(64, ten_init_pow); }
 if (EEPROM.readInt(68) != tuo_ref)      { EEPROM.writeInt(68, tuo_ref); }
 if (EEPROM.readInt(72) != k1_per2)      { EEPROM.writeInt(72, k1_per2); }
-if (EEPROM.readInt(76) != k1_time2)      { EEPROM.writeInt(76, k1_time2); }
-if (EEPROM.readInt(80) != rpower)      { EEPROM.writeInt(80, rpower); }
-if (EEPROM.readInt(84) != pow_stab)      { EEPROM.writeInt(84, pow_stab); }
+if (EEPROM.readInt(76) != k1_time2)     { EEPROM.writeInt(76, k1_time2); }
+if (EEPROM.readInt(80) != rpower)       { EEPROM.writeInt(80, rpower); }
+if (EEPROM.readInt(84) != pow_stab)     { EEPROM.writeInt(84, pow_stab); }
 EEPROM.commit();              // Обязательно COMMIT в память
 //БИПАЕМ ЗУМЕРОМ 
 digitalWrite(ZOOM_PIN, 0);
@@ -943,7 +944,7 @@ ps_stop_temp = EEPROM.readInt(48);
 man_pwr = EEPROM.readInt(52);
 if (EEPROM.readInt(56) <= 0) { fail_c = 99; }         // Чтобы не сработали остановки при первом запуске с пустой памятью          
 else { fail_c = EEPROM.readInt(56); }                 // Если данные есть - забиарем в температуру аварии по кубу
-if (EEPROM.readInt(60) <= 0) { fail_d = 45; }         
+if (EEPROM.readInt(60) <= 0) { fail_d = 55; }         
 else {fail_d = EEPROM.readInt(60); }                  // Если данные есть - забираем в температуру аварии по ТСА/дефлегматору
 if (EEPROM.readInt(64) < 0) { ten_init_pow = 0; }     // Аналогично с номинальной мощностью ТЭН-а
 else {ten_init_pow = EEPROM.readInt(64); }
@@ -990,7 +991,6 @@ else {delay(1000);}
 void disp_stats() {
 lcd.noBlink();
 // Выводим на экран отчет с температурами, временем и т.д.
-// Температуры (* МОЖНО ДОБАВИТЬ ТЕМПЕРАТУРУ СИМИСТОРА, опционально)
 lcd.setCursor(0,0); lcd.print("Tc:");
 lcd.setCursor(3,0); lcd.print(cube_temp); lcd.write(223);
 lcd.setCursor(0,1); lcd.print("Td:");
