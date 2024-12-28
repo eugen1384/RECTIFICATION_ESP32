@@ -1,4 +1,4 @@
-// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+// DOIT ESP32 DEVKIT V1 board
 // БИБЛИОТЕКИ
 #include <LiquidCrystal_I2C.h>     // LCD Display
 #include <GyverDS18.h>             // GyverDS18 v1.1.2 DS18B20 Temp Sensor lib
@@ -10,9 +10,10 @@
 #include <PZEM004Tv30.h>           // PZEM-004t измеритель мощности
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // КОНСТАНТЫ ПИНОВ
-#define PUMP_PIN 14                // Включение помпы через MOSFET (ранее был KL3_PIN для третьего клапана)
+#define PUMP_PIN 15                // Включение помпы через MOSFET (ранее был KL3_PIN для третьего клапана)
 #define KL1_PIN 13                 // Клапан 1
 #define KL2_PIN 12                 // Клапан 2
+#define KL3_PIN 14                 // Клапан 3. Пока не используется. 
 #define CONT_PIN 27                // Твердотельное реле, пуск контактора
 #define TC_PIN 26                  // Термодатчик куба
 #define TD_PIN 33                  // Термодатчик дефлегматора или ТСА
@@ -108,12 +109,14 @@ int ten_pow_calc = 0;   // ВЫЧИСЛЯЕМАЯ КОРРЕКТИРОВКА М�
 int tuo_ref;            // Температура царги/узла отбора от которой стартует режим стабилизации
 int overtemp_limit;     // ЛИМИТ ПРЕВЫШЕНИЙ ПО ТЕМПЕРАТУРЕ НА RE_1KL, RE_1KL
 // ФЛАГИ АВАРИЙ
-bool alarm_tsa = 0;
-bool alarm_cube = 0;
-bool alarm_mq3 = 0;
-bool alarm_power = 0;
-bool alarm_sim = 0; 
-bool alarm_all = 0;
+bool alarm_tsa = 0;     // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ ТСА
+bool alarm_cube = 0;    // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ КУБА
+bool alarm_mq3 = 0;     // ФЛАГ ОШИБКИ ПО MQ3 ДАТЧИКУ ПАРОВ СПИРТА
+bool alarm_power = 0;   // ФЛАГ ОШИБКИ ПО МОЩНОСТИ
+bool alarm_sim = 0;       // ФЛАГ ОШИБКИ ПО ПЕРЕГРЕВУ СИМИСТОРА
+bool alarm_t_sensors = 0; // ФЛАГ ОШИБКИ ПО ДАТЧИКАМ ТЕМПЕРАТУРЫ
+bool alarm_sim_t_sensor = 0; // ФЛАГ ПО ДАТЧИКУ СИМИСТОРА
+bool alarm_all = 0;       // ОБЩИЙ ФЛАГ АВАРИИ, СРАЗУ ОСТАНАВЛИВАЕТ ПРОЦЕСС  
 // ДОПОЛНИТЕЛЬНЫЕ ФЛАГИ
 bool bmp_err = 0;        // ФЛАГ ПОДКЛЮЧЕНИЯ BMP180 СЕНСОРА. 
 bool adv_disp = 0;       // ДОП ЭКРАН ВЛЕВО
@@ -250,13 +253,17 @@ static uint32_t tmr_temp;
 if (millis() - tmr_temp >= 1000) {
 tmr_temp = millis();
 if (sensor_cube.readTemp()) { cube_temp = sensor_cube.getTemp(); sensor_cube.requestTemp(); }
-else { sensor_cube.requestTemp(); }
+else { sensor_cube.requestTemp(); 
+       cube_temp = 0.00; } // ОБЯЗАТЕЛЬНО СБРАСЫВАЕМ ТЕМПЕРАТУРУ ЕСЛИ ДАТЧИК НЕ ОТВЕТИЛ!
 if (sensor_defl.readTemp()) { defl_temp = sensor_defl.getTemp(); sensor_defl.requestTemp(); }
-else { sensor_defl.requestTemp(); }
+else { sensor_defl.requestTemp(); 
+       defl_temp = 0.00; }
 if (sensor_out.readTemp()) { uo_temp = sensor_out.getTemp(); sensor_out.requestTemp(); }
-else { sensor_out.requestTemp(); }
+else { sensor_out.requestTemp(); 
+       uo_temp = 0.00; }
 if (sensor_sim.readTemp()) { sim_temp = sensor_sim.getTemp(); sensor_sim.requestTemp(); }
-else { sensor_sim.requestTemp(); }
+else { sensor_sim.requestTemp(); 
+       sim_temp = 0.00; }
 
 if (!bmp_err) { bmp_press = bmp.readPressure() * 0.00750062;}   // получаем давление в Па и переводим в мм ртутного столба
 else { bmp_press = 0; }
@@ -359,7 +366,7 @@ if (mode == 1 && cube_temp > ps_stop_temp) { stop_proc(); err_desc = "NORMAL PS 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ГРУППА БЕЗОПАСНОСТИ!
 // ПРОВЕРКА АВАРИЙ
-if (alarm_tsa || alarm_cube || alarm_power || alarm_mq3 || alarm_sim) {alarm_all = 1;}
+if (alarm_tsa || alarm_cube || alarm_power || alarm_mq3 || alarm_sim || alarm_t_sensors || alarm_sim_t_sensor ) {alarm_all = 1;}
 else {alarm_all = 0; }
 // ВКЛЮЧЕНИЕ ЗУМЕРА ПРИ АВАРИИ С ПЕРИОДОМ 'zoom_per'(мс) и проверкой на вкл в настройках
 if (zoom_enable) {
@@ -399,6 +406,42 @@ else { alarm_mq3 = 0; }
 if (sim_temp > sim_fail_temp) { alarm_sim = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
 else { alarm_sim = 0; }
+// ОБРАБОТКА ОТКАЗА ДАТЧИКОВ
+// СИМИСТР ПРОВЕРЯЕМ ВСЕГДА!
+if (sim_temp == 0.00 && start_stop == 1) {
+  alarm_sim_t_sensor = 1; 
+  if (alarm_counter >= 120) { stop_proc(); } }
+else {alarm_sim_t_sensor = 0;}
+// ПРОВЕРЯЕМ ПОКАЗАНИЯ ДАТЧИКОВ ТОЛЬКО В РЕЖИМЕ РАБОТЫ
+// НА ПРЯМОТОКЕ(POTSTILL) НУЖНЫ ТОЛЬКО 2 ДАТЧИКА, КУБ и ДЕФЛЕГМАТОР
+if (mode == 1 && start_stop == 1 ) {
+  if (cube_temp == 0.00 || defl_temp == 0.00) { 
+  alarm_t_sensors = 1;
+  if (alarm_counter >= 120) { stop_proc(); } }
+  else {alarm_t_sensors = 0;}
+}
+// НА РЕКТИФИКАЦИИ НУЖНЫ ВСЕ 3 ДАТЧИКА
+if (mode == 2 && start_stop == 1 ) {
+  if (cube_temp == 0.00 || defl_temp == 0.00 || uo_temp == 0.00 ) {
+  alarm_t_sensors = 1;
+  if (alarm_counter >= 120) { stop_proc(); } }
+  else {alarm_t_sensors = 0;}
+}
+if (mode == 3 && start_stop == 1 ) {
+  if (cube_temp == 0.00 || defl_temp == 0.00 || uo_temp == 0.00 ) {
+  alarm_t_sensors = 1;
+  if (alarm_counter >= 120) { stop_proc(); } }
+  else {alarm_t_sensors = 0;}
+}
+// В РУЧНОМ РЕЖИМА АНАЛОГИЧНО ПРЯМОТОКУ(POTSTILL)
+if (mode == 4 && start_stop == 1 ) {
+  if (cube_temp == 0.00 || defl_temp == 0.00 ) {
+  alarm_t_sensors = 1;
+  if (alarm_counter >= 120) { stop_proc(); } }
+  else {alarm_t_sensors = 0;}
+}
+// сбрасываем ошибку по датчикам если не в режиме работы
+if (start_stop == 0 ) {alarm_t_sensors = 0;}
 
 // # # # # # # # # # # # # #
 // ОПИСАНИЕ РЕЖИМОВ ДЛЯ ДИСПЛЕЯ, СТАРТ/СТОП и ОШИБОК
