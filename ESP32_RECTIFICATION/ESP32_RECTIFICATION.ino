@@ -137,7 +137,7 @@ String err_desc;        // СТРОКА ОШИБКИ
 // ДВУМЕРНЫЙ МАССИВ СТРОК МЕНЮ УСТАНОВОК. РАЗБИТ ПО ЭКРАНАМ(СТОЛБЦЫ)
 String menu_settings[4][7] = 
 {
-{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA T     : ","PS PWR START: ","MODE     :   ", "ERR CUBE TEMP:","MQ3 SENSOR EN:"},
+{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA TEMP  : ","PS PWR START: ","MODE     :   ", "ERR CUBE TEMP:","MQ3 SENSOR EN:"},
 {"K1 TIME  1:   ","K2 TIME  :    ","DECREMENT   : ","PS PWR END  : ","WORK/STOP:    ","ERR TSA TEMP :","POW STAB EN  :"},
 {"K1 CYCLE 2:   ","STAB TIME:    ","RE PWR START: ","PS STOP TEMP: ","TEN FULL POW: ","TUO STAB TEMP:","SAVE SETTINGS "},
 {"K1 TIME  2:   ","HEAD TIME:    ","RE PWR END  : ","MANUAL POWER: ","TEN RAZG POW: ","ZOOMER ENABLE:","EXIT          "}
@@ -177,7 +177,7 @@ digitalWrite(ZOOM_PIN, 1);                  // Выставляем высоки
 lcd.init();                                 // Инициализация дисплея
 lcd.backlight();                            // Подсветка дисплея
 lcd.blink();                                // Включаем блинк для заставки
-char line1[] = "BLACK BOX AUTO v6.2";       
+char line1[] = "BLACK BOX AUTO v6.3";       
 char line2[] = "....................";
 lcd.setCursor(0, 1);
   for (int i = 0; i < strlen(line1); i++) { lcd.print(line1[i]); delay(50); }
@@ -400,8 +400,8 @@ else { alarm_cube = 0; }
 if (mq3_enable) {
   if (!digitalRead(MQ3_PIN)) { alarm_mq3 = 1;
     if (alarm_counter >= 120) { stop_proc(); } }
-else { alarm_mq3 = 0; }
-  }
+else { alarm_mq3 = 0; } }
+else { alarm_mq3 = 0; }    // ОТКЛЮЧАЕМ АВАРИЮ ПРИ ВЫКЛЮЧЕНИИ ДАТЧИКА В НАСТРОЙКАХ
 // ОБРАБОТКА ПЕРЕГРЕВА СИМИСТОРА
 if (sim_temp > sim_fail_temp) { alarm_sim = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
