@@ -1,37 +1,36 @@
 // DOIT ESP32 DEVKIT V1 board
-// БИБЛИОТЕКИ
+// БИБЛИОТЕКИ (LIBS)
 #include <LiquidCrystal_I2C.h>     // LCD Display
 #include <GyverDS18.h>             // GyverDS18 v1.1.2 DS18B20 Temp Sensor lib
 #include <EncButton.h>             // Encoder
-#include <EEPROM.h>                // EEPROM память
-#include <WiFi.h>                  // Wi-Fi модуль
-#include <Wire.h>                  // Wire для работы BMP180
+#include <EEPROM.h>                // EEPROM
+#include <WiFi.h>                  // Wi-Fi
+#include <Wire.h>                  // Wire BMP180
 #include <Adafruit_BMP085.h>       // BMP180
-#include <PZEM004Tv30.h>           // PZEM-004t измеритель мощности
+#include <PZEM004Tv30.h>           // PZEM-004t 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // КОНСТАНТЫ ПИНОВ
-#define PUMP_PIN 15                // Включение помпы через MOSFET (ранее был KL3_PIN для третьего клапана)
-#define KL1_PIN 13                 // Клапан 1
-#define KL2_PIN 12                 // Клапан 2
-#define KL3_PIN 14                 // Клапан 3. Пока не используется. 
-#define CONT_PIN 27                // Твердотельное реле, пуск контактора
-#define TC_PIN 26                  // Термодатчик куба
-#define TD_PIN 33                  // Термодатчик дефлегматора или ТСА
-#define TUO_PIN 32                 // Термодатчик узла отбора
-#define TS_PIN 25                  // Термодатчик на радиаторе симистора
-#define BTN_PIN 5                  // Кнопка энкодера
-#define S1_PIN 19                  // S1 энкодера
-#define S2_PIN 18                  // S2 энкодера
-#define ZOOM_PIN 4                 // Пищалка-zoomer
-#define MQ3_PIN 23                 // Датчик паров спирта (опционально)
-#define PZEM_RX_PIN 3              // RX пин UART0 для PZEM-004
-#define PZEM_TX_PIN 1              // TX пин UART0 для PZEM-004
-#define PZEM_SERIAL Serial         // Стандартный Serial для PZEM-004
+#define PUMP_PIN 15                // ВКЛЮЧЕНИЕ ПОМПЫ (ПОДАЕТСЯ НА АНАЛОГОВЫЙ ПИН СИСТЕМЫ ОХЛАЖДЕНИЯ)
+#define KL1_PIN 13                 // КЛАПАН 1
+#define KL2_PIN 12                 // КЛАПАН 2
+#define KL3_PIN 14                 // КЛАПАН 3 (не используется, но на плате есть MOSFET) 
+#define CONT_PIN 27                // ТВЕРДОТЕЛЬНОЕ РЕЛЕ ПУСК КОНТАКТОРА
+#define TC_PIN 26                  // DS18B20 КУБ
+#define TD_PIN 33                  // DS18B20 ТСА/ДЕФЛЕГМАТОРА
+#define TUO_PIN 32                 // DS18B20 УЗЛА ОТБОРА/ЦАРГИ
+#define TS_PIN 25                  // DS18B20 СИСМИСТОРА
+#define BTN_PIN 5                  // КНОПКА ЭНКОДЕРА
+#define S1_PIN 19                  // S1 ЭНКОДЕРА
+#define S2_PIN 18                  // S2 ЭНКОДЕРА
+#define ZOOM_PIN 4                 // ZOOMER
+#define MQ3_PIN 23                 // MQ3 СЕНСОР ПАРОВ СПИРТА (РАБОТАЕТ ПО high/low уровням с предварительной настройкой)
+#define PZEM_RX_PIN 3              // RX UART0 PZEM-004
+#define PZEM_TX_PIN 1              // TX UART0 PZEM-004
+#define PZEM_SERIAL Serial         // Serial   PZEM-004
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ГРАНИЧНЫЕ УСЛОВИЯ
 #define P_START_UO 75              // Включение помпы по температуре царги/узла отбора
 #define P_START_C  75              // Включение помпы по температуре в кубе
-
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ДАННЫЕ Wi-Fi СЕТИ 2.4GHz 
 const char* ssid = "JHOME_2GHz";
@@ -46,94 +45,93 @@ GyverDS18Single sensor_cube(TC_PIN); // куб
 GyverDS18Single sensor_out(TUO_PIN); // узел отбора/царга
 GyverDS18Single sensor_defl(TD_PIN); // ТСА, или дефлегматор
 GyverDS18Single sensor_sim(TS_PIN);  // симистор
-
 // ОПИСЫВАЕМ ЗАДАЧУ ДЛЯ CPU 0
 TaskHandle_t Task1;
-// ПЕРМЕННЫЕ ПО ТИПАМ
-float cube_temp;        // ТЕМП. В КУБЕ
-float defl_temp;        // ТЕМП. ДЕФЛЕГМАТОРА
-float uo_temp;          // ТЕМП. УЗЛА ОТБОРА
-float uo_temp_fix;      // ТЕМП. ФИКСАЦИИ ОТБОРА (КОРРЕКТИРУЕМАЯ)
-float uo_temp_fix_init; // ТЕМП. ФИКСАЦИИ ОТБОРА, НАЧАЛЬНАЯ
-float sim_temp;         // ТЕМП. СИМИСТОРА
-float delt;             // ДЕЛЬТА ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ
-float pr_temp;          // ТЕМПЕРАТУРА КИПЕНИЯ СПИРТА ПРИ АТМ ДАВЛЕНИИ
-float press_delta = 0;  // ТЕМПЕРАТУРНАЯ РАЗНИЦА ПО ДАВЛЕНИЮ В ПРОЦЕССЕ
-float press_init  = 0;  // НАЧАЛЬНОЕ ДАВЛЕНИЕ НА МОМЕНТ ФИКСАЦИИ ТЕМПЕРАТУРЫ
-float press_curr  = 0;  // ТЕКУЩЕЕ ДАВЛЕНИЕ НА МОМЕНТ РАСЧЕТА
-float voltage;          // НАПРЯЖЕНИЕ ПИТАЮЩЕЙ СЕТИ
-float current;          // ТОК ЧЕРЕЗ НАГРУЗКУ
-float power;            // МОЩНОСТЬ НА НАГРУЗКЕ
-float energy;           // ЗАТРАТЫ ЭНЕРГИИ
-float frequency;        // ЧАСТОТА СЕТИ
-float watt_pow;         // ВЫЧИСЛЯЕМАЯ МОЩНОСТЬ ПО % ОТ МОЩНОСТИ ТЭН
-float ten_init_f_pow;   // ВЫЧЕСЛЯЕМАЯ МОЩНОСТЬ
-// # # # # # # # 
-int mode = 4;           // РЕЖИМ РАБОТЫ. ПО УМОЛЧАНИЮ 4(MANUAL)
-int ten_init_pow;       // НОМИНАЛЬНАЯ МОЩНОСТЬ ТЭНА
-int ten_pow;            // ЗАДАНИЕ МОЩНОСТИ ТЭНА
-int dimmer;             // ДИММЕР. ХРАНИТ ВРЕМЯ ВКЛ СИМИСТОРА В мкс ОТ ПРОХОЖДЕНИЯ НУЛЯ СИНУСОИДОЙ
-int count_stab;         // СЧЕТЧИК ВРЕМЕНИ СТАБИЛИЗАЦИИ
-int cnt_stab;           // СЧЕТЧИК - ВРЕМЯ СТАБИЛИЗАЦИИ
-int count_head;         // СЧЕТЧИК - ВРЕМЯ ОТБОРА ГОЛОВ
-int cnt_head;           // СЧЕТЧИК - ВРЕМЯ ОТБОРА ГОЛОВ
-int count_body;         // СЧЕТЧИК ВРЕМЕНИ РАБОТЫ ОТБОРА ТЕЛА
-int cnt_body;           // ДЛЯ ДИСПЛЕЯ 
-int xflag_count;        // СЧЕТЧИК ПРЕВЫШЕНИЙ ТЕМПЕРАТУРЫ УО
-int head_time;          // ВРЕМЕНЯ ОТБОРА ГОЛОВ
-int stab_time;          // РАБОТА НА СЕБЯ
-int k1_per;             // ПЕРИОД РАБОТЫ КЛАПАНА 1
-int k2_per;             // ПЕРИОД РАБОТЫ КЛАПАНА 2
-int k1_time;            // ВРЕМЯ ОТКРЫТИЯ КЛАПАНА 1
-int k2_time;            // ВРЕМЯ ОТКРЫТИЯ КЛАПАНА 2
-int k1_per2;            // ПЕРИОД КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ
-int k1_time2;           // ВРЕМЕНИ ОТКРЫТИЯ КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ 
-int decr;               // ДЕКРЕМЕНТ СНИЖЕНИЯ СКОРОСТИ ОТБОРА, УВЕЛИЧЕНИЕ ПЕРИОДА РАБОТЫ КЛАПАНА НА n СЕК
-int re_pwr_start;       // % МОЩНОСТИ ТЭН В НАЧАЛЕ РЕКТИФИКАЦИИ
-int re_pwr_end;         // % МОЩНОСТИ ТЭН В КОНЦЕ РЕКТИФИКАЦИИ  
-int ps_pwr_start;       // % МОЩНОСТИ ТЭН POTSTILL НАЧАЛО
-int ps_pwr_end;         // % МОЩНОСТИ ТЭН POTSTILL КОНЕЦ
-int man_pwr;            // % МОЩНОСТИ НА РУЧНОМ РЕЖИМЕ 
-int rpower;             // % МОЩНОСТИ ТЭН ДЛЯ РАЗГОНА КУБА
-int ptr;                // УКАЗАТЕЛЬ В МЕНЮ УСТАНОВОК
-int start_stop = 0;     // ФЛАГ СТАРТ/СТОП
-int fail_c = 99;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. КУБА 
-int fail_d = 55;        // АВАРИЙНЫЙ СТОП ПО ТЕМП. ДЕФЛЕГМАТОРА
-int sim_fail_temp = 65;  // ПРЕДЕЛЬНАЯ ТЕМПЕРАТУРА СИМИСТОРА
-int ps_stop_temp;       // ТЕМПЕРАТУРА ОСТАНОВКИ НА POTSTILL
-int zoom_per = 500;     // ПЕРИОД ЗУМЕРА МС (500 DEFAULT)
-int alarm_counter = 0;  // СЧЕТЧИК СЕКУНД ПРЕДУПРЕЖДЕНИЯ ОБ АВАРИИ ПЕРЕД ОТКЛЮЧЕНИЕМ
-int bmp_press;          // АТМОСФЕРНОЕ ДАВЛЕНИЕ В ММ РТ.СТ.
-int ten_pow_delt = 0;   // ВЫЧИСЛЯЕМАЯ ДЕЛЬТУ ПО МОЩНОСТИ в %
-int ten_pow_calc = 0;   // ВЫЧИСЛЯЕМАЯ КОРРЕКТИРОВКА МОЩНОСТИ В %
-int tuo_ref;            // Температура царги/узла отбора от которой стартует режим стабилизации
-int overtemp_limit;     // ЛИМИТ ПРЕВЫШЕНИЙ ПО ТЕМПЕРАТУРЕ НА RE_1KL, RE_1KL
+// ПЕРЕМЕННЫЕ ПО ТИПАМ
+float cube_temp;                  // ТЕМПЕРАТУРА В КУБЕ
+float defl_temp;                  // ТЕМПЕРАТУРА ДЕФЛЕГМАТОРА
+float uo_temp;                    // ТЕМПЕРАТУРА УЗЛА ОТБОРА
+float uo_temp_fix;                // ТЕМПЕРАТУРА ФИКСАЦИИ ОТБОРА (КОРРЕКТИРУЕМАЯ)
+float uo_temp_fix_init;           // ТЕМПЕРАТУРА ФИКСАЦИИ ОТБОРА, НАЧАЛЬНАЯ
+float sim_temp;                   // ТЕМПЕРАТУРА СИМИСТОРА
+float delt;                       // ДЕЛЬТА ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ
+float pr_temp;                    // ТЕМПЕРАТУРА КИПЕНИЯ СПИРТА ПРИ АТМ ДАВЛЕНИИ
+float press_delta = 0;            // ТЕМПЕРАТУРНАЯ РАЗНИЦА ПО ДАВЛЕНИЮ В ПРОЦЕССЕ
+float press_init  = 0;            // НАЧАЛЬНОЕ ДАВЛЕНИЕ НА МОМЕНТ ФИКСАЦИИ ТЕМПЕРАТУРЫ
+float press_curr  = 0;            // ТЕКУЩЕЕ ДАВЛЕНИЕ НА МОМЕНТ РАСЧЕТА
+float voltage;                    // НАПРЯЖЕНИЕ ПИТАЮЩЕЙ СЕТИ
+float current;                    // ТОК ЧЕРЕЗ НАГРУЗКУ
+float power;                      // МОЩНОСТЬ НА НАГРУЗКЕ
+float energy;                     // ЗАТРАТЫ ЭНЕРГИИ
+float frequency;                  // ЧАСТОТА СЕТИ
+float watt_pow;                   // ВЫЧИСЛЯЕМАЯ МОЩНОСТЬ ПО % ОТ МОЩНОСТИ ТЭН
+float ten_init_f_pow;             // ВЫЧЕСЛЯЕМАЯ МОЩНОСТЬ
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+int mode = 4;                     // РЕЖИМ РАБОТЫ. ПО УМОЛЧАНИЮ 4(MANUAL)
+int ten_init_pow;                 // НОМИНАЛЬНАЯ МОЩНОСТЬ ТЭНА
+int ten_pow;                      // ЗАДАНИЕ МОЩНОСТИ ТЭНА
+int dimmer;                       // ДИММЕР. ХРАНИТ ВРЕМЯ ВКЛ СИМИСТОРА В мкс ОТ ПРОХОЖДЕНИЯ НУЛЯ СИНУСОИДОЙ
+int count_stab;                   // СЧЕТЧИК СТАБИЛИЗАЦИИ
+int cnt_stab;                     // СЧЕТЧИК СТАБИЛИЗАЦИИ в мин
+int count_head;                   // СЧЕТЧИК ОТБОРА ГОЛОВ
+int cnt_head;                     // СЧЕТЧИК ОТБОРА ГОЛОВ в мин
+int count_body;                   // СЧЕТЧИК ВРЕМЕНИ РАБОТЫ ОТБОРА ТЕЛА
+int cnt_body;                     // СЧЕТЧИК ВРЕМЕНИ РАБОТЫ ОТБОРА ТЕЛА в мин
+int xflag_count;                  // СЧЕТЧИК ПРЕВЫШЕНИЙ ТЕМПЕРАТУРЫ УО
+int head_time;                    // ВРЕМЕНЯ ОТБОРА ГОЛОВ (минуты)
+int stab_time;                    // ВРЕМЯ СТАБИЛИЗАЦИИ (минуты)
+int k1_per;                       // ПЕРИОД РАБОТЫ КЛАПАНА 1 (сек)
+int k2_per;                       // ПЕРИОД РАБОТЫ КЛАПАНА 2 (сек)
+int k1_time;                      // ВРЕМЯ ОТКРЫТИЯ КЛАПАНА 1 (мс)
+int k2_time;                      // ВРЕМЯ ОТКРЫТИЯ КЛАПАНА 2 (мс)
+int k1_per2;                      // ПЕРИОД КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ (сек)
+int k1_time2;                     // ВРЕМЕНИ ОТКРЫТИЯ КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ (мс) 
+int decr;                         // ДЕКРЕМЕНТ СНИЖЕНИЯ СКОРОСТИ ОТБОРА, УВЕЛИЧЕНИЕ ПЕРИОДА РАБОТЫ КЛАПАНА (сек)
+int re_pwr_start;                 // % МОЩНОСТИ ТЭН В НАЧАЛЕ РЕКТИФИКАЦИИ
+int re_pwr_end;                   // % МОЩНОСТИ ТЭН В КОНЦЕ РЕКТИФИКАЦИИ  
+int ps_pwr_start;                 // % МОЩНОСТИ ТЭН POTSTILL НАЧАЛО
+int ps_pwr_end;                   // % МОЩНОСТИ ТЭН POTSTILL КОНЕЦ
+int man_pwr;                      // % МОЩНОСТИ НА РУЧНОМ РЕЖИМЕ 
+int rpower;                       // % МОЩНОСТИ ТЭН ДЛЯ РАЗГОНА КУБА
+int ptr;                          // УКАЗАТЕЛЬ В МЕНЮ УСТАНОВОК
+int start_stop = 0;               // ФЛАГ СТАРТ/СТОП
+int fail_c = 99;                  // АВАРИЙНЫЙ СТОП ПО ТЕМПЕРАТУРЕ КУБА 
+int fail_d = 55;                  // АВАРИЙНЫЙ СТОП ПО ТЕМПЕРАТУРЕ ДЕФЛЕГМАТОРА
+int sim_fail_temp = 65;           // ПРЕДЕЛЬНАЯ ТЕМПЕРАТУРА СИМИСТОРА
+int ps_stop_temp;                 // ТЕМПЕРАТУРА ОСТАНОВКИ НА POTSTILL
+int zoom_per = 500;               // ПЕРИОД ЗУМЕРА МС
+int alarm_counter = 0;            // СЧЕТЧИК СЕКУНД ПРЕДУПРЕЖДЕНИЯ ОБ АВАРИИ ПЕРЕД ОТКЛЮЧЕНИЕМ
+int bmp_press;                    // АТМОСФЕРНОЕ ДАВЛЕНИЕ В мм рт.ст.
+int ten_pow_delt = 0;             // ВЫЧИСЛЯЕМАЯ ДЕЛЬТУ ПО МОЩНОСТИ в %
+int ten_pow_calc = 0;             // ВЫЧИСЛЯЕМАЯ КОРРЕКТИРОВКА МОЩНОСТИ В %
+int tuo_ref;                      // ТЕМПЕРАТУРА ЦАРГИ/УЗЛА_ОТБОРА ДЛЯ СТАРАТ РЕЖИМА СТАБИЛИЗАЦИИ 
+int overtemp_limit = 5;           // ЛИМИТ ЧИСЛА ПРЕВЫШЕНИЙ ПО ТЕМПЕРАТУРЕ НА RE_1KL, RE_2KL
 // ФЛАГИ АВАРИЙ
-bool alarm_tsa = 0;     // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ ТСА
-bool alarm_cube = 0;    // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ КУБА
-bool alarm_mq3 = 0;     // ФЛАГ ОШИБКИ ПО MQ3 ДАТЧИКУ ПАРОВ СПИРТА
-bool alarm_power = 0;   // ФЛАГ ОШИБКИ ПО МОЩНОСТИ
-bool alarm_sim = 0;       // ФЛАГ ОШИБКИ ПО ПЕРЕГРЕВУ СИМИСТОРА
-bool alarm_t_sensors = 0; // ФЛАГ ОШИБКИ ПО ДАТЧИКАМ ТЕМПЕРАТУРЫ
-bool alarm_sim_t_sensor = 0; // ФЛАГ ПО ДАТЧИКУ СИМИСТОРА
-bool alarm_all = 0;       // ОБЩИЙ ФЛАГ АВАРИИ, СРАЗУ ОСТАНАВЛИВАЕТ ПРОЦЕСС  
+bool alarm_tsa = 0;               // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ ТСА
+bool alarm_cube = 0;              // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ КУБА
+bool alarm_mq3 = 0;               // ФЛАГ ОШИБКИ ПО MQ3 ДАТЧИКУ ПАРОВ СПИРТА
+bool alarm_power = 0;             // ФЛАГ ОШИБКИ ПО МОЩНОСТИ
+bool alarm_sim = 0;               // ФЛАГ ОШИБКИ ПО ПЕРЕГРЕВУ СИМИСТОРА
+bool alarm_t_sensors = 0;         // ФЛАГ ОШИБКИ ПО ДАТЧИКАМ ТЕМПЕРАТУРЫ
+bool alarm_sim_t_sensor = 0;      // ФЛАГ ПО ДАТЧИКУ СИМИСТОРА
+bool alarm_all = 0;               // ОБЩИЙ ФЛАГ АВАРИИ, СРАЗУ ОСТАНАВЛИВАЕТ ПРОЦЕСС  
 // ДОПОЛНИТЕЛЬНЫЕ ФЛАГИ
-bool bmp_err = 0;        // ФЛАГ ПОДКЛЮЧЕНИЯ BMP180 СЕНСОРА. 
-bool adv_disp = 0;       // ДОП ЭКРАН ВЛЕВО
-bool err_disp = 0;       // ПОКАЗ ЭКРАНА ОШИБОК
-bool is_set = 0;         // ФЛАГ УСТАНОВКИ ЗНАЧЕНИЯ ПЕРМЕННОЙ В МЕНЮ
-bool in_menu = 0;        // ФЛАГ ПОПАДАНИЯ В МЕНЮ УСТАНОВОК
-bool tflag = 0;          // ФЛАГ ФИКСАЦИИ ТЕМПЕРАТУРЫ УО/ЦАРГИ
-bool xflag = 0;          // ФЛАГ ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ УО/ЦАРГИ
-bool zoom_enable = 1;    // ВКЛ/ОТКЛ ЗУМЕРА 
-bool mq3_enable = 0;     // ВКЛ/ОТКЛ ДАТЧИКА ПАРОВ СПИРТА
-bool pow_stab = 1;       // ВКЛ/ОТКЛ СТАБИЛИЗАЦИИ МОЩНОСТИ
+bool bmp_err = 0;                 // ФЛАГ ПОДКЛЮЧЕНИЯ BMP180 СЕНСОРА. 
+bool adv_disp = 0;                // ДОП ЭКРАН ВЛЕВО
+bool err_disp = 0;                // ПОКАЗ ЭКРАНА ОШИБОК
+bool is_set = 0;                  // ФЛАГ УСТАНОВКИ ЗНАЧЕНИЯ ПЕРМЕННОЙ В МЕНЮ
+bool in_menu = 0;                 // ФЛАГ ПОПАДАНИЯ В МЕНЮ УСТАНОВОК
+bool tflag = 0;                   // ФЛАГ ФИКСАЦИИ ТЕМПЕРАТУРЫ УО/ЦАРГИ
+bool xflag = 0;                   // ФЛАГ ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ УО/ЦАРГИ
+bool zoom_enable = 1;             // ВКЛ/ОТКЛ ЗУМЕРА 
+bool mq3_enable = 0;              // ВКЛ/ОТКЛ ДАТЧИКА ПАРОВ СПИРТА
+bool pow_stab = 1;                // ВКЛ/ОТКЛ СТАБИЛИЗАЦИИ МОЩНОСТИ
 // СТРОКОВЫЕ
-String submode;         // ИНДИКАТОР ПОДРЕЖИМА РАБОТЫ РЕКТИФИКАЦИИ
-String mode_desc;       // ОПИСАНИЕ РЕЖИМА ДЛЯ ДИСПЛЕЯ
-String start_desc;      // ОПИСАНИЕ СТАРТ/СТОП
-String html_page;       // СТРАНИЦА WEB СЕРВЕРА
-String err_desc;        // СТРОКА ОШИБКИ
+String submode;                  // ИНДИКАТОР ПОДРЕЖИМА РАБОТЫ РЕКТИФИКАЦИИ
+String mode_desc;                // ОПИСАНИЕ РЕЖИМА ДЛЯ ДИСПЛЕЯ
+String start_desc;               // ОПИСАНИЕ СТАРТ/СТОП
+String html_page;                // СТРАНИЦА WEB СЕРВЕРА
+String err_desc;                 // СТРОКА ОШИБКИ
 // ДВУМЕРНЫЙ МАССИВ СТРОК МЕНЮ УСТАНОВОК. РАЗБИТ ПО ЭКРАНАМ(СТОЛБЦЫ)
 String menu_settings[4][7] = 
 {
@@ -153,7 +151,7 @@ float alco_temps[68][2] =
 {763,78.26}, {764,78.30}, {765,78.34}, {766,78.38}, {767,78.42}, {768,78.45}, {769,78.49}, {770,78.53}, {771,78.57}, {772,78.61},
 {773,78.64}, {774,78.68}, {775,78.72}, {776,78.76}, {777,78.80}, {778,78.83}, {779,78.87}, {780,78.91} 
 };
-// МАССИВ ЗАДЕРЖЕК ДЛЯ ДИММЕРА 0-100%(101 элемент). ДЛЯ БОЛЕЕ ЛИНЕЙНОГО ИЗМЕНЕНИЯ МОЩНОСТИ(в сравнении с map)
+// МАССИВ ЗАДЕРЖЕК ДИММЕРА 0-100%(101 элемент). ДЛЯ БОЛЕЕ ЛИНЕЙНОГО ИЗМЕНЕНИЯ МОЩНОСТИ
 int power_array[] = {9100, 8670, 8416, 8220, 8057, 7914, 7787, 7671, 7563, 7463, 
                      7369, 7279, 7194, 7112, 7033, 6957, 6884, 6813, 6743, 6676, 
                      6610, 6546, 6483, 6421, 6361, 6301, 6242, 6185, 6128, 6071, 
@@ -173,11 +171,11 @@ Serial.setTimeout(10);                      // Обязательно выста
 Serial2.begin(9600, SERIAL_8N1, 16, 17);    // Serial 2 на 16 и 17 GPIO для Arduino регулятора мощности
 Serial2.setTimeout(10);                     // Таймаут так же выставляем по минимуму
 pinMode(ZOOM_PIN, OUTPUT);                  // Выключить пищалку сразу
-digitalWrite(ZOOM_PIN, 1);                  // Выставляем высокий уровень, так как используется LowLevel Buzzer
+digitalWrite(ZOOM_PIN, 1);                  // Выставляем высокий уровень, так как используется LowLevel zoomer
 lcd.init();                                 // Инициализация дисплея
 lcd.backlight();                            // Подсветка дисплея
 lcd.blink();                                // Включаем блинк для заставки
-char line1[] = "BLACK BOX AUTO v6.3";       
+char line1[] = "BLACK BOX AUTO v7";       
 char line2[] = "....................";
 lcd.setCursor(0, 1);
   for (int i = 0; i < strlen(line1); i++) { lcd.print(line1[i]); delay(50); }
@@ -185,15 +183,15 @@ lcd.noBlink();
 lcd.setCursor(0, 3);
   for (int i = 0; i < strlen(line2); i++) { lcd.print(line2[i]); delay(30); }
 // ПИНЫ
-pinMode(BTN_PIN, INPUT_PULLUP);
-pinMode(PUMP_PIN, OUTPUT);
-pinMode(KL1_PIN, OUTPUT);
-pinMode(KL2_PIN, OUTPUT);
-pinMode(CONT_PIN, OUTPUT);
-pinMode(S1_PIN, INPUT);
-pinMode(S2_PIN, INPUT);
-pinMode(2, OUTPUT);
-pinMode(MQ3_PIN, INPUT); 
+pinMode(BTN_PIN, INPUT_PULLUP);             // кнопка энкодера
+pinMode(PUMP_PIN, OUTPUT);                  // enable сигнал на помпу
+pinMode(KL1_PIN, OUTPUT);                   // клапан 1
+pinMode(KL2_PIN, OUTPUT);                   // клапан 2
+pinMode(KL3_PIN, OUTPUT);                   // клапан 3 (не задействован в коде)
+pinMode(CONT_PIN, OUTPUT);                  // реле контактора
+pinMode(S1_PIN, INPUT);                     // S1 энкодера
+pinMode(S2_PIN, INPUT);                     // S2 энкодера
+pinMode(MQ3_PIN, INPUT);                    // MQ3 сенсор (работает по низкому уровню)
 // ПОДКЛЮЧАЕМСЯ К Wi-Fi СЕТИ 2.4GHz
 WiFi.begin(ssid, password);
 lcd.clear();
@@ -240,13 +238,13 @@ if (!bmp.begin()) {
 // ЧИТАЕМ НАСТРОЙКИ ИЗ EEPROM (float 4байта, int32 тоже 4 байта)
 eeprom_read();
 lcd.noBlink();
-pzem.resetEnergy();                         // Сброс счетчика энергии
-}//END SETUP
+pzem.resetEnergy();   // Сброс счетчика энергии
+}
+//SETUP END
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОСНОВНОЙ ЦИКЛ
 void loop() {
-
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ПОЛУЧЕНИЕ ТЕМПЕРАТУР И ДАВЛЕНИЯ С ДАТЧИКОВ
 static uint32_t tmr_temp;
@@ -264,14 +262,13 @@ else { sensor_out.requestTemp();
 if (sensor_sim.readTemp()) { sim_temp = sensor_sim.getTemp(); sensor_sim.requestTemp(); }
 else { sensor_sim.requestTemp(); 
        sim_temp = 0.00; }
-
 if (!bmp_err) { bmp_press = bmp.readPressure() * 0.00750062;}   // получаем давление в Па и переводим в мм ртутного столба
 else { bmp_press = 0; }
 // получаем температуру кипения спирта при текущем атм давлении. Пока только для сравнения, 
-// сама поправка вычисляется при ректификации от фиксированной температуры 
+// сама поправка вычисляется при ректификации от фиксированной температуры и давления
 get_temp_atm();
 }// КОНЕЦ ОПРОСА ДАТЧИКОВ
-
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (ВПРАВО)
   if (!is_set && !in_menu && !adv_disp) {err_disp = 1; }
   if (!is_set && !in_menu && !err_disp && adv_disp) { adv_disp = 0; }
@@ -359,10 +356,9 @@ if (enc.press()) {
   if (is_set && ptr == 27 && in_menu) { in_menu = 0; is_set = 0; } // ВЫХОД ИЗ МЕНЮ
   if (is_set && ptr == 26 && in_menu) { eeprom_write(); } // ЗАПИСЬ ВСЕХ ЗНАЧИМЫХ ПЕРЕМЕННЫХ В EEPROM 
 }
-
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОСТАНОВКA НА РЕЖИМЕ POTSTILL
 if (mode == 1 && cube_temp > ps_stop_temp) { stop_proc(); err_desc = "NORMAL PS STOP";} // ПО ТЕМП. В КУБЕ на POTSTILL
-
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ГРУППА БЕЗОПАСНОСТИ!
 // ПРОВЕРКА АВАРИЙ
@@ -418,32 +414,27 @@ if (mode == 1 && start_stop == 1 ) {
   if (cube_temp == 0.00 || defl_temp == 0.00) { 
   alarm_t_sensors = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
-  else {alarm_t_sensors = 0;}
-}
+  else {alarm_t_sensors = 0;} }
 // НА РЕКТИФИКАЦИИ НУЖНЫ ВСЕ 3 ДАТЧИКА
 if (mode == 2 && start_stop == 1 ) {
   if (cube_temp == 0.00 || defl_temp == 0.00 || uo_temp == 0.00 ) {
   alarm_t_sensors = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
-  else {alarm_t_sensors = 0;}
-}
+  else {alarm_t_sensors = 0;} }
 if (mode == 3 && start_stop == 1 ) {
   if (cube_temp == 0.00 || defl_temp == 0.00 || uo_temp == 0.00 ) {
   alarm_t_sensors = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
-  else {alarm_t_sensors = 0;}
-}
+  else {alarm_t_sensors = 0;} }
 // В РУЧНОМ РЕЖИМА АНАЛОГИЧНО ПРЯМОТОКУ(POTSTILL)
 if (mode == 4 && start_stop == 1 ) {
   if (cube_temp == 0.00 || defl_temp == 0.00 ) {
   alarm_t_sensors = 1;
   if (alarm_counter >= 120) { stop_proc(); } }
-  else {alarm_t_sensors = 0;}
-}
+  else {alarm_t_sensors = 0;} }
 // сбрасываем ошибку по датчикам если не в режиме работы
 if (start_stop == 0 ) {alarm_t_sensors = 0;}
-
-// # # # # # # # # # # # # #
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОПИСАНИЕ РЕЖИМОВ ДЛЯ ДИСПЛЕЯ, СТАРТ/СТОП и ОШИБОК
 if (mode == 1) { mode_desc = "PSTILL";}
 if (mode == 2) { mode_desc = "RE_1KL";}
@@ -456,7 +447,7 @@ if (alarm_tsa)   {err_desc = "ERR TSA TEMP  ";}
 if (alarm_sim)   {err_desc = "ERR SIM TEMP  ";}
 if (alarm_mq3)   {err_desc = "ERR MQ3 ALCO  ";}
 if (alarm_power) {err_desc = "ERR POWER SET ";}
-
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // Опрос PZEM-004 по Serial 0, быстрее чем раз в 1 сек не отадет изменения
 static uint32_t tmr_pzem;
 if (millis() - tmr_pzem >= 1000) {
@@ -472,7 +463,6 @@ if (isnan(energy)) { energy = 0;}
 frequency = pzem.frequency();
 if (isnan(frequency)) {frequency = 0;}
 }
-
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ЗАДАНИЕ МОЩНОСТИ ТЭН ПО РЕЖИМАМ
 // РЕЖИМ "POTSTILL"
@@ -482,41 +472,39 @@ if (start_stop) {            // регулируем мощность тольк
 digitalWrite(CONT_PIN, 1);   // включили контактор на ТЭН
 // Разгон до 75 градусов в кубе
 if (mode == 1 && cube_temp < 75 ) {
-  ten_pow = rpower;
+  ten_pow = rpower;   // не всегда нужна полная мощность, сделана регулируемой
   submode = "R"; }
 // Плавная регулировка в процессе
 if (mode == 1 && cube_temp >= 75) {
   ten_pow = map(cube_temp, 75, ps_stop_temp, ps_pwr_start, ps_pwr_end);
   submode = "P"; }
-// РЕЖИМЫ РЕКТИФИКАЦИИ. СТАРТ РЕГУЛИРОВКИ ПО ДОСТИЖЕНИЮ ТЕМПЕРАТУРЫ tuo_ref В УЗЛЕ ОТБОРА. САМА РЕГУЛИРОВКА ОТ ТЕМПЕРАТУРЫ В КУБЕ. 
+// РЕЖИМЫ РЕКТИФИКАЦИИ. СТАРТ РЕГУЛИРОВКИ ПО ДОСТИЖЕНИЮ ТЕМПЕРАТУРЫ tuo_ref В УЗЛЕ ОТБОРА. САМА РЕГУЛИРОВКА ОТ ТЕМПЕРАТУРЫ (концентрации спирта) В КУБЕ. 
 if ((mode == 2 || mode == 3) && uo_temp < tuo_ref) { ten_pow = rpower; submode = "R";}
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref) { ten_pow = map(cube_temp, 80, 99, re_pwr_start, re_pwr_end); }
 // РУЧНОЙ РЕЖИМ
 if (mode == 4){ submode = "-";
 ten_pow = man_pwr; }
 // КОРРЕКЦИЯ МОЩНОСТИ
-
 // ВЫЧИСЛЯЕМ В ВАТТАХ ЗАДАННУЮ В % МОЩНОСТЬ
 ten_init_f_pow = float(ten_init_pow);  // для результата с запятой нужно преобразование переменной
 watt_pow = (ten_init_f_pow / 100) * ten_pow;
-// Регулировка мощности приращением/уменьшением % мощности через поправку к заданной
+// Регулировка мощности приращением/уменьшением % мощности через поправку к заданной. Только при включенном параметре стабилизации. 
 if (pow_stab == 1) {
 if (ten_pow > 10 && ten_pow < 90) {                              // Есть смысл регулировать только в пределах до 90%, дальше мощности просто неоткуда браться в плюс
   if ((int(watt_pow) - int(power)) > 15 ) {ten_pow_delt += 1;}   // Разброс в 15 Ватт компенсирует инерцию обратной связи от PZEM-004
   if ((int(power) - int(watt_pow)) > 15 ) {ten_pow_delt -= 1;}   // Аналогично в обратную сторону
  }
 }
-else {ten_pow_delt = 0;}  // сбрасываем поправку если отключичли стабилизацию
+else {ten_pow_delt = 0;}  // сбрасываем поправку если отключили стабилизацию
 // В целом процесс стабилизации занимает 2-5 секунд. 
 ten_pow_calc = constrain(ten_pow + ten_pow_delt, 0, 100);        // Ограничиваем значение на всякий случай
 // пишем в serial arduino Int число со значением задержки включения симистора из массива
 Serial2.print(power_array[ten_pow_calc] );
-// Arduino дальше само понимает и полностью выключает симистор при значении меньше 2%, и так же открывает полностью если выставлено 98%
+// Arduino в блоке управления сисмистором само понимает и полностью выключает симистор при значении меньше 2%, и так же открывает полностью если выставлено 98%
 
 }// конец старт/стоп
-else { ten_pow = 0; Serial2.print(9100); // Если "STOP" то передаем минимальную мощность
-  digitalWrite(CONT_PIN, 0);             // Отключаем контактор после выставления минимальной мощности. 
-}                                        // Таким образом контактор используется в щадащем режиме и исключает искру на контактах(кроме режима экстренного размыкания при прбое симистора). 
+else { ten_pow = 0; Serial2.print(9100); // Если "STOP" то передаем минимальную мощность, чтобы не было искры в контакторе
+  digitalWrite(CONT_PIN, 0); }            // Отключаем контактор после выставления минимальной мощности. 
 }//КОНЕЦ ТАЙМЕРА УПРАВЛЕНИЯ МОЩНОСТЬЮ
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -535,7 +523,7 @@ if ((mode == 2 || mode == 3) && count_stab < (stab_time * 60) && uo_temp >= tuo_
 // ОТБОР ГОЛОВ RE_2KL, RE_1KL. ПОКА СЧЕТКИК НЕ ДОЙДЕТ ДО ЗАДАННОГО ВРЕМЕНИ
 if ((mode == 2 ) && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head <= (head_time * 60)) {
     submode = "H";                                                        // ИНДИКАЦИЯ "ОТБОР ГОЛОВ"
-    digitalWrite(KL2_PIN, 0);                                             // Закрываем клапан 2 
+    digitalWrite(KL2_PIN, 0);                                             // Принудительно закрываем клапан 2 
 //СЧЕТЧИК ВРЕМЕНИ ОТБОРА
 static uint32_t tmr_head;
 if (millis() - tmr_head >= 1000) { tmr_head = millis();
@@ -544,7 +532,6 @@ if (millis() - tmr_head >= 1000) { tmr_head = millis();
     tflag = 0; }                   // Сбрасываем флаг задания эталонной температуры      
 kl1_work_cycle(); // РАБОТА КЛАПАНА 1
 }// КОНЕЦ РЕЖИМА ОТБОРА ГОЛОВ 
-
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОТБОР ПРОДУКТА НА РЕЖИМЕ RE_1KL(1 КЛАПАН)
@@ -629,7 +616,7 @@ tmr_adv_disp = millis();
 disp_advanced();
 }
 
-// индикация работы
+// Индикация работы диодом на плате ESP32 DEV KIT
 static uint32_t tmr_led;
 if (millis() - tmr_led >= 500) { tmr_led = millis();
 if (!digitalRead(2)) { digitalWrite(2,1);}
@@ -640,7 +627,7 @@ else {digitalWrite(2,0);}
 /// ФУНКЦИИ
 void main_screen() {    // Основной экран
 lcd.noBlink();
-  // Вывод температуры куба
+// Вывод температуры куба
 lcd.setCursor(0,0); lcd.print("Tc:");
 lcd.setCursor(3,0); lcd.print(cube_temp); lcd.write(223); lcd.print(" ");
 // Вывод температуры дефлегматора/ТСА
@@ -793,7 +780,7 @@ lcd.setCursor(10,3); lcd.print("Prf:      ");
 lcd.setCursor(14,3);lcd.print(int(watt_pow));
 }
 
-// РАБОТА ПЕРВОГО КЛАПАНА НА РЕЖИМЕ R1_KL и R2_KL ПРИ ОТБОРЕ ГОЛОВ
+// РАБОТА ПЕРВОГО КЛАПАНА НА РЕЖИМЕ R1_KL и R2_KL - ПРИ ОТБОРЕ ГОЛОВ
 void kl1_work_cycle() {
 static uint32_t tmr_kl1_head; 
 if (millis() - tmr_kl1_head >= (k1_per * 1000)) { // РАБОТА КЛАПАНА ОТБОРА
@@ -813,18 +800,19 @@ if (millis() - tmr_kl2_body >= k2_time) {  // Закрыли клапан 2 по
     digitalWrite(KL2_PIN, 0);}
 }
 
-// РАБОТА ПЕРВОГО КЛАПАНА В РЕЖИМЕ ДОБОРА ГОЛОВ НА RE_2KL, ИЛИ ОТБОР ТЕЛА ПРИ R1_KL
+// РАБОТА ПЕРВОГО КЛАПАНА В РЕЖИМЕ ДОБОРА ГОЛОВ НА RE_2KL, ИЛИ ОТБОРА ТЕЛА ПРИ R1_KL
 void kl1_work_cycle2() {
   static uint32_t tmr_kl1_past; 
 if (millis() - tmr_kl1_past >= (k1_per2 * 1000)) {
     tmr_kl1_past = millis();
     digitalWrite(KL1_PIN, 1); }
-if (millis() - tmr_kl1_past >= k1_time2) {  // Закрыли клапан по времени в половину от заданного на отборе голов
+if (millis() - tmr_kl1_past >= k1_time2) { 
     digitalWrite(KL1_PIN, 0); }
 }
 // ПРОВЕРКА НА ЗАВЫШЕНИЕ ФИКСИРОВАННОЙ ТЕМПЕРАТУРЫ
 void check_tf(){
 // если температура зашла выше uo_temp_fix + delt, убавляем скорость отбора, ставим флаг завышения, увеличиваем счетчик завышений.
+// xflag сбрасывается при нормализации температуры
 if ((uo_temp >= (uo_temp_fix + delt)) && !xflag) {
   k2_per = k2_per + decr;
   k1_per = k1_per + decr;
@@ -836,7 +824,7 @@ if ((uo_temp >= (uo_temp_fix + delt)) && !xflag) {
 void calc_delta() {
 // Если датчик давления полностью исправен то вычисляем дельту по температуре и корректируем fix температуру в УО/ЦАРГЕ.
 // шаг изменения температуры кипения спирта 0.038 градуса Цельсия на 1 мм рт ст. Зависимость линейная. 
-if (!bmp_err && bmp_press > 712 && bmp_press < 781 && uo_temp_fix > 0) {  // Адекватные пределы давления на случай если датчик откажет в процесс (покажет 140), 
+if (!bmp_err && bmp_press > 712 && bmp_press < 781 && uo_temp_fix > 70) {  // Адекватные пределы давления на случай если датчик откажет в процесс (покажет 140), 
 // и проверка условия наличия не нулевого значения в переменной uo_temp_fix
   press_curr = float(bmp_press);
   press_delta = press_init - press_curr;
