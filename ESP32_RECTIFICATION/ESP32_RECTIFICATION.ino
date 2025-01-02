@@ -175,7 +175,7 @@ digitalWrite(ZOOM_PIN, 1);                  // Выставляем высоки
 lcd.init();                                 // Инициализация дисплея
 lcd.backlight();                            // Подсветка дисплея
 lcd.blink();                                // Включаем блинк для заставки
-char line1[] = "BLACK BOX AUTO v7";       
+char line1[] = "BLACK BOX AUTO V7";       
 char line2[] = "....................";
 lcd.setCursor(0, 1);
   for (int i = 0; i < strlen(line1); i++) { lcd.print(line1[i]); delay(50); }

@@ -65,7 +65,7 @@ cloopTime = currentTime;
 lcd.init();
 lcd.backlight();
 
-lcd.setCursor(0, 0); lcd.print("BLACK BOX V6.2 ");
+lcd.setCursor(0, 0); lcd.print("BLACK BOX V7 ");
 delay(1000);
 lcd.setCursor(0, 1); lcd.print("COOLING STATION");
 delay(1500);
