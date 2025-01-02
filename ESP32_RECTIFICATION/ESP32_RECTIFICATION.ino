@@ -192,6 +192,7 @@ pinMode(CONT_PIN, OUTPUT);                  // реле контактора
 pinMode(S1_PIN, INPUT);                     // S1 энкодера
 pinMode(S2_PIN, INPUT);                     // S2 энкодера
 pinMode(MQ3_PIN, INPUT);                    // MQ3 сенсор (работает по низкому уровню)
+pinMode(2, OUTPUT);                         // ДИОД НА ПЛАТЕ ESP32 DEV KIT
 // ПОДКЛЮЧАЕМСЯ К Wi-Fi СЕТИ 2.4GHz
 WiFi.begin(ssid, password);
 lcd.clear();
