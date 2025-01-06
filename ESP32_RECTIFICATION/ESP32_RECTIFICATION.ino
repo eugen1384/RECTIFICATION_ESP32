@@ -253,16 +253,20 @@ if (millis() - tmr_temp >= 1000) {
 tmr_temp = millis();
 if (sensor_cube.readTemp()) { cube_temp = sensor_cube.getTemp(); sensor_cube.requestTemp(); }
 else { sensor_cube.requestTemp(); 
-       cube_temp = 0.00; } // ОБЯЗАТЕЛЬНО СБРАСЫВАЕМ ТЕМПЕРАТУРУ ЕСЛИ ДАТЧИК НЕ ОТВЕТИЛ!
+       //cube_temp = 0.00; 
+       } // ОБЯЗАТЕЛЬНО СБРАСЫВАЕМ ТЕМПЕРАТУРУ ЕСЛИ ДАТЧИК НЕ ОТВЕТИЛ!
 if (sensor_defl.readTemp()) { defl_temp = sensor_defl.getTemp(); sensor_defl.requestTemp(); }
 else { sensor_defl.requestTemp(); 
-       defl_temp = 0.00; }
+       //defl_temp = 0.00; 
+       }
 if (sensor_out.readTemp()) { uo_temp = sensor_out.getTemp(); sensor_out.requestTemp(); }
 else { sensor_out.requestTemp(); 
-       uo_temp = 0.00; }
+       //uo_temp = 0.00; 
+       }
 if (sensor_sim.readTemp()) { sim_temp = sensor_sim.getTemp(); sensor_sim.requestTemp(); }
 else { sensor_sim.requestTemp(); 
-       sim_temp = 0.00; }
+       //sim_temp = 0.00; 
+       }
 if (!bmp_err) { bmp_press = bmp.readPressure() * 0.00750062;}   // получаем давление в Па и переводим в мм ртутного столба
 else { bmp_press = 0; }
 // получаем температуру кипения спирта при текущем атм давлении. Пока только для сравнения, 
@@ -522,7 +526,7 @@ if ((mode == 2 || mode == 3) && count_stab < (stab_time * 60) && uo_temp >= tuo_
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОТБОР ГОЛОВ RE_2KL, RE_1KL. ПОКА СЧЕТКИК НЕ ДОЙДЕТ ДО ЗАДАННОГО ВРЕМЕНИ
-if ((mode == 2 ) && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head <= (head_time * 60)) {
+if ((mode == 2 || mode == 3) && uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head <= (head_time * 60)) {
     submode = "H";                                                        // ИНДИКАЦИЯ "ОТБОР ГОЛОВ"
     digitalWrite(KL2_PIN, 0);                                             // Принудительно закрываем клапан 2 
 //СЧЕТЧИК ВРЕМЕНИ ОТБОРА
@@ -885,8 +889,8 @@ html_page = html_page + "<tr><td>Spent Head</td><td align=\"center\">" + String(
 html_page = html_page + "<tr><td>Spent Main</td><td align=\"center\">" + String(cnt_body) + "</td><td align=\"center\"> min </td></tr>";
 html_page = html_page + "<tr><td>Atm.pressure</td><td align=\"center\">" + String(bmp_press) + "</td><td align=\"center\"> mm rt.st. </td></tr>";
 html_page = html_page + "<tr><td>Razgon Power</td><td align=\"center\">" + String(rpower) + "</td><td align=\"center\"> % </td></tr>";
-html_page = html_page + "<tr><td>Calc Power</td><td align=\"center\">" + String(watt_pow) + "</td><td align=\"center\"> Wt</td></tr>";
-html_page = html_page + "<tr><td>Fact Power</td><tpd align=\"center\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
+html_page = html_page + "<tr><td>Calc Power</td><td align=\"center\">" + String(watt_pow) + "</td><td align=\"center\"> Wt </td></tr>";
+html_page = html_page + "<tr><td>Fact Power</td><td align=\"center\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
 html_page = html_page + "<tr><td>Voltage</td><td align=\"center\">" + String(voltage) + "</td><td align=\"center\"> V </td></tr>";
 html_page = html_page + "<tr><td>Current</td><td align=\"center\">" + String(current) + "</td><td align=\"center\"> A </td></tr>";
 html_page = html_page + "<tr><td>Energy</td><td align=\"center\">" + String(energy) + "</td><td align=\"center\"> kWt*h </td></tr>";
