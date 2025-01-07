@@ -479,6 +479,7 @@ if (mode == 1 && cube_temp >= 75) {
 // РЕЖИМЫ РЕКТИФИКАЦИИ 
 if ((mode == 2 || mode == 3) && uo_temp < tuo_ref) { ten_pow = rpower; submode = "R";}
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "S") { ten_pow = re_pwr_stab; }
+if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "H") { ten_pow = re_pwr_stab; }
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "B") { ten_pow = re_pwr_work; } 
 // РУЧНОЙ РЕЖИМ
 if (mode == 4){ submode = "-";
@@ -859,7 +860,7 @@ if (client) {                                // Если есть клиентс
 html_page = "";
 html_page = html_page + "<!DOCTYPE html><html translate=\"no\">";
 html_page = html_page + "<head><title>SamWeb</title></head>";
-html_page = html_page + "<body><h2>AUTOMATION WEB SERVER V6</h2>";
+html_page = html_page + "<body><h2>AUTOMATION SERVER V7</h2>";
 html_page = html_page + "<table border=\"1\" cellspacing=\"1\" cellpadding=\"0\">";
 html_page = html_page + "<tr><th> Parameter </th><th> Value </th><th> Measure </th></tr>";
 html_page = html_page + "<tr><td>Mode</td><td align=\"center\">" + mode_desc + "</td><td align=\"center\">" + submode + "</td></tr>";
