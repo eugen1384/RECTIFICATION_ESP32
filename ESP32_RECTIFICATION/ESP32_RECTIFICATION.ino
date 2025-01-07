@@ -52,7 +52,6 @@ float cube_temp;                  // ТЕМПЕРАТУРА В КУБЕ
 float defl_temp;                  // ТЕМПЕРАТУРА ДЕФЛЕГМАТОРА
 float uo_temp;                    // ТЕМПЕРАТУРА УЗЛА ОТБОРА
 float uo_temp_fix;                // ТЕМПЕРАТУРА ФИКСАЦИИ ОТБОРА (КОРРЕКТИРУЕМАЯ)
-float uo_temp_fix_init;           // ТЕМПЕРАТУРА ФИКСАЦИИ ОТБОРА, НАЧАЛЬНАЯ
 float sim_temp;                   // ТЕМПЕРАТУРА СИМИСТОРА
 float delt;                       // ДЕЛЬТА ЗАВЫШЕНИЯ ТЕМПЕРАТУРЫ
 float pr_temp;                    // ТЕМПЕРАТУРА КИПЕНИЯ СПИРТА ПРИ АТМ ДАВЛЕНИИ
@@ -87,8 +86,8 @@ int k2_time;                      // ВРЕМЯ ОТКРЫТИЯ КЛАПАНА 
 int k1_per2;                      // ПЕРИОД КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ (сек)
 int k1_time2;                     // ВРЕМЕНИ ОТКРЫТИЯ КЛАПАНА 1 НА ДОБОРЕ ГОЛОВ (мс) 
 int decr;                         // ДЕКРЕМЕНТ СНИЖЕНИЯ СКОРОСТИ ОТБОРА, УВЕЛИЧЕНИЕ ПЕРИОДА РАБОТЫ КЛАПАНА (сек)
-int re_pwr_start;                 // % МОЩНОСТИ ТЭН В НАЧАЛЕ РЕКТИФИКАЦИИ
-int re_pwr_end;                   // % МОЩНОСТИ ТЭН В КОНЦЕ РЕКТИФИКАЦИИ  
+int re_pwr_stab;                 // % МОЩНОСТИ ТЭН В НАЧАЛЕ РЕКТИФИКАЦИИ
+int re_pwr_work;                   // % МОЩНОСТИ ТЭН В КОНЦЕ РЕКТИФИКАЦИИ  
 int ps_pwr_start;                 // % МОЩНОСТИ ТЭН POTSTILL НАЧАЛО
 int ps_pwr_end;                   // % МОЩНОСТИ ТЭН POTSTILL КОНЕЦ
 int man_pwr;                      // % МОЩНОСТИ НА РУЧНОМ РЕЖИМЕ 
@@ -135,10 +134,10 @@ String err_desc;                 // СТРОКА ОШИБКИ
 // ДВУМЕРНЫЙ МАССИВ СТРОК МЕНЮ УСТАНОВОК. РАЗБИТ ПО ЭКРАНАМ(СТОЛБЦЫ)
 String menu_settings[4][7] = 
 {
-{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA TEMP  : ","PS PWR START: ","MODE     :   ", "ERR CUBE TEMP:","MQ3 SENSOR EN:"},
+{"K1 CYCLE 1:   ","K2 CYCLE :    ","DELTA TEMP  : ","PS PWR START: ","MODE     :   " ,"ERR CUBE TEMP:","MQ3 SENSOR EN:"},
 {"K1 TIME  1:   ","K2 TIME  :    ","DECREMENT   : ","PS PWR END  : ","WORK/STOP:    ","ERR TSA TEMP :","POW STAB EN  :"},
-{"K1 CYCLE 2:   ","STAB TIME:    ","RE PWR START: ","PS STOP TEMP: ","TEN FULL POW: ","TUO STAB TEMP:","SAVE SETTINGS "},
-{"K1 TIME  2:   ","HEAD TIME:    ","RE PWR END  : ","MANUAL POWER: ","TEN RAZG POW: ","ZOOMER ENABLE:","EXIT          "}
+{"K1 CYCLE 2:   ","STAB TIME:    ","RE PWR STAB:  ","PS STOP TEMP: ","TEN FULL POW: ","TUO STAB TEMP:","SAVE SETTINGS "},
+{"K1 TIME  2:   ","HEAD TIME:    ","RE PWR WORK:  ","MANUAL POWER: ","TEN RAZG POW: ","ZOOMER ENABLE:","EXIT          "}
 };
 // ДВУМЕРНЫЙ МАССИВ ТЕМПЕРАТУР КИПЕНИЯ СПИРТА(второй столбец) ПРИ АТМОСФЕРНОМ ДАВЛЕНИИ(первый столбец) (мм.рт.ст.)
 float alco_temps[68][2] =
@@ -252,28 +251,21 @@ static uint32_t tmr_temp;
 if (millis() - tmr_temp >= 1000) {
 tmr_temp = millis();
 if (sensor_cube.readTemp()) { cube_temp = sensor_cube.getTemp(); sensor_cube.requestTemp(); }
-else { sensor_cube.requestTemp(); 
-       //cube_temp = 0.00; 
-       } // ОБЯЗАТЕЛЬНО СБРАСЫВАЕМ ТЕМПЕРАТУРУ ЕСЛИ ДАТЧИК НЕ ОТВЕТИЛ!
+else { sensor_cube.requestTemp(); } 
 if (sensor_defl.readTemp()) { defl_temp = sensor_defl.getTemp(); sensor_defl.requestTemp(); }
-else { sensor_defl.requestTemp(); 
-       //defl_temp = 0.00; 
-       }
+else { sensor_defl.requestTemp(); }
 if (sensor_out.readTemp()) { uo_temp = sensor_out.getTemp(); sensor_out.requestTemp(); }
-else { sensor_out.requestTemp(); 
-       //uo_temp = 0.00; 
-       }
+else { sensor_out.requestTemp();  }
 if (sensor_sim.readTemp()) { sim_temp = sensor_sim.getTemp(); sensor_sim.requestTemp(); }
-else { sensor_sim.requestTemp(); 
-       //sim_temp = 0.00; 
-       }
+else { sensor_sim.requestTemp();  }
+// нужна проверка доступности датчика.. но только после изменений в железе и подаче нормального питающего напряжения
 if (!bmp_err) { bmp_press = bmp.readPressure() * 0.00750062;}   // получаем давление в Па и переводим в мм ртутного столба
 else { bmp_press = 0; }
-// получаем температуру кипения спирта при текущем атм давлении. Пока только для сравнения, 
-// сама поправка вычисляется при ректификации от фиксированной температуры и давления
+// получаем температуру кипения спирта при текущем атм давлении. Только для сравнения 
 get_temp_atm();
 }// КОНЕЦ ОПРОСА ДАТЧИКОВ
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+// ENCODER
 if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (ВПРАВО)
   if (!is_set && !in_menu && !adv_disp) {err_disp = 1; }
   if (!is_set && !in_menu && !err_disp && adv_disp) { adv_disp = 0; }
@@ -281,19 +273,19 @@ if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В
     if (ptr > 27) {ptr = 0;} // циклическая прокрутка
     if (is_set && in_menu) {
         if (ptr == 0)  {k1_per = constrain(k1_per + 1, 0, 120);}
-        if (ptr == 1)  {k1_time = constrain(k1_time + 50, 0, 5000);}
+        if (ptr == 1)  {k1_time = constrain(k1_time + 10, 0, 5000);}
         if (ptr == 2)  {k1_per2 = constrain(k1_per2 + 1, 0, 120);}
-        if (ptr == 3)  {k1_time2 = constrain(k1_time2 + 50, 0, 5000);}
+        if (ptr == 3)  {k1_time2 = constrain(k1_time2 + 10, 0, 5000);}
 //
         if (ptr == 4)  {k2_per = constrain(k2_per + 1, 0, 120);}
-        if (ptr == 5)  {k2_time = constrain(k2_time + 50, 0, 5000);}
+        if (ptr == 5)  {k2_time = constrain(k2_time + 10, 0, 5000);}
         if (ptr == 6)  {stab_time = constrain(stab_time + 1, 0, 60);}
         if (ptr == 7)  {head_time = constrain(head_time + 1, 0, 240);}
 //
         if (ptr == 8)  {delt = constrain(delt + 0.01, 0, 2.0);}
         if (ptr == 9)  {decr = constrain(decr + 1, 0, 60);}
-        if (ptr == 10) {re_pwr_start = constrain(re_pwr_start + 1, 0, 100);}
-        if (ptr == 11) {re_pwr_end = constrain(re_pwr_end + 1, 0, 100);}
+        if (ptr == 10) {re_pwr_stab = constrain(re_pwr_stab + 1, 0, 100);}
+        if (ptr == 11) {re_pwr_work = constrain(re_pwr_work + 1, 0, 100);}
 //
         if (ptr == 12) {ps_pwr_start = constrain(ps_pwr_start + 1, 0, 100);}
         if (ptr == 13) {ps_pwr_end = constrain(ps_pwr_end + 1, 0, 100);}
@@ -321,19 +313,19 @@ if (enc.left()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В�
      if (ptr < 0) {ptr = 27;} // циклическая прокрутка
      if (is_set && in_menu) {
         if (ptr == 0)  {k1_per = constrain(k1_per - 1, 0, 120);}
-        if (ptr == 1)  {k1_time = constrain(k1_time - 50, 0, 5000);}
+        if (ptr == 1)  {k1_time = constrain(k1_time - 10, 0, 5000);}
         if (ptr == 2)  {k1_per2 = constrain(k1_per2 - 1, 0, 120);}
-        if (ptr == 3)  {k1_time2 = constrain(k1_time2 - 50, 0, 5000);}
+        if (ptr == 3)  {k1_time2 = constrain(k1_time2 - 10, 0, 5000);}
 //
         if (ptr == 4)  {k2_per = constrain(k2_per - 1, 0, 120);}
-        if (ptr == 5)  {k2_time = constrain(k2_time - 50, 0, 5000);}
+        if (ptr == 5)  {k2_time = constrain(k2_time - 10, 0, 5000);}
         if (ptr == 6)  {stab_time = constrain(stab_time - 1, 0, 60);}
         if (ptr == 7)  {head_time = constrain(head_time - 1, 0, 240);}
 //
         if (ptr == 8)  {delt = constrain(delt - 0.01, 0, 2.0);}
         if (ptr == 9)  {decr = constrain(decr - 1, 0, 60);}
-        if (ptr == 10) {re_pwr_start = constrain(re_pwr_start - 1, 0, 100);}
-        if (ptr == 11) {re_pwr_end = constrain(re_pwr_end - 1, 0, 100);}
+        if (ptr == 10) {re_pwr_stab = constrain(re_pwr_stab - 1, 0, 100);}
+        if (ptr == 11) {re_pwr_work = constrain(re_pwr_work - 1, 0, 100);}
 //
         if (ptr == 12) {ps_pwr_start = constrain(ps_pwr_start - 1, 0, 100);}
         if (ptr == 13) {ps_pwr_end = constrain(ps_pwr_end - 1, 0, 100);}
@@ -354,6 +346,7 @@ if (enc.left()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В�
         if (ptr == 25) {pow_stab = constrain(pow_stab - 1, 0, 1);}
       }
 }
+
 // ОБРАБОТЧИК НАЖАТИЯ КНОПКИ ЭНКОДЕРА
 if (enc.press()) { 
   if (in_menu) { is_set = !is_set; }
@@ -363,7 +356,7 @@ if (enc.press()) {
 }
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОСТАНОВКA НА РЕЖИМЕ POTSTILL
-if (mode == 1 && cube_temp > ps_stop_temp) { stop_proc(); err_desc = "NORMAL PS STOP";} // ПО ТЕМП. В КУБЕ на POTSTILL
+if (mode == 1 && int(cube_temp) >= ps_stop_temp) { stop_proc(); err_desc = "NORMAL PS STOP";} // ПО ТЕМП. В КУБЕ на POTSTILL
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ГРУППА БЕЗОПАСНОСТИ!
 // ПРОВЕРКА АВАРИЙ
@@ -442,8 +435,8 @@ if (start_stop == 0 ) {alarm_t_sensors = 0;}
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОПИСАНИЕ РЕЖИМОВ ДЛЯ ДИСПЛЕЯ, СТАРТ/СТОП и ОШИБОК
 if (mode == 1) { mode_desc = "PSTILL";}
-if (mode == 2) { mode_desc = "RE_1KL";}
-if (mode == 3) { mode_desc = "RE_2KL";}
+if (mode == 2) { mode_desc = "REC1KL";}
+if (mode == 3) { mode_desc = "REC2KL";}
 if (mode == 4) { mode_desc = "MANUAL";}
 if (start_stop == 1) {start_desc = "WORK";}
 if (start_stop == 0) {start_desc = "STOP";}
@@ -483,9 +476,10 @@ if (mode == 1 && cube_temp < 75 ) {
 if (mode == 1 && cube_temp >= 75) {
   ten_pow = map(cube_temp, 75, ps_stop_temp, ps_pwr_start, ps_pwr_end);
   submode = "P"; }
-// РЕЖИМЫ РЕКТИФИКАЦИИ. СТАРТ РЕГУЛИРОВКИ ПО ДОСТИЖЕНИЮ ТЕМПЕРАТУРЫ tuo_ref В УЗЛЕ ОТБОРА. САМА РЕГУЛИРОВКА ОТ ТЕМПЕРАТУРЫ (концентрации спирта) В КУБЕ. 
+// РЕЖИМЫ РЕКТИФИКАЦИИ 
 if ((mode == 2 || mode == 3) && uo_temp < tuo_ref) { ten_pow = rpower; submode = "R";}
-if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref) { ten_pow = map(cube_temp, 80, 99, re_pwr_start, re_pwr_end); }
+if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "S") { ten_pow = re_pwr_stab; }
+if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "B") { ten_pow = re_pwr_work; } 
 // РУЧНОЙ РЕЖИМ
 if (mode == 4){ submode = "-";
 ten_pow = man_pwr; }
@@ -515,6 +509,7 @@ else { ten_pow = 0; Serial2.print(9100); // Если "STOP" то передае�
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОСНОВНАЯ ЛОГИКА РАБОТЫ РЕЖИМОВ РЕКТИФИКАЦИИ
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+if (start_stop) { // работаем клапанами только в режиме нагрева!
 // СТАБИЛИЗАЦИЯ
 // СЧЕТЧИК ВРЕМЕНИ РАБОТЫ ПРИ СТАБИЛИЗАЦИИ RE_1KL, RE_2KL 
 static uint32_t tmr_stab;
@@ -540,13 +535,11 @@ kl1_work_cycle(); // РАБОТА КЛАПАНА 1
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОТБОР ПРОДУКТА НА РЕЖИМЕ RE_1KL(1 КЛАПАН)
-if (mode == 2) {
+if (mode == 2 ) {
 fix_temp(); // ФИКСАЦИЯ ТЕМПЕРАТУРЫ ОТБОРА И НАЧАЛЬНОГО ДАВЛЕНИЯ
-// Дальше работаем уже после фиксации температуры
 if (uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && tflag) {
-   submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА"
+submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА"
 static uint32_t tmr_body; // Счетчик времени отбора, для дисплея
-calc_delta(); // вычисляем возможную поправку по температуре от изменения давления
 if (millis() - tmr_body >= 1000) { 
   tmr_body = millis(); 
   count_body = count_body + 1; 
@@ -560,26 +553,37 @@ if (xflag_count > overtemp_limit) { stop_proc(); err_desc = "NORMAL RE STOP";}
 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ОТБОР ПРОДУКТА НА РЕЖИМЕ RE_2KL(2 КЛАПАНА)
-if (mode == 3) {
+if (mode == 3 ) {
 fix_temp(); // ФИКСАЦИЯ ТЕМПЕРАТУРЫ ОТБОРА И НАЧАЛЬНОГО ДАВЛЕНИЯ
-// Дальше работаем уже после фиксации температуры
 if (uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && tflag) {
-   submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА"
+submode = "B"; // ИНДИКАЦИЯ "ОТБОР ТЕЛА"
 static uint32_t tmr_body; // Счетчик времени отбора, для дисплея
-calc_delta(); // вычисляем возможную поправку по температуре от изменения давления
 if (millis() - tmr_body >= 1000) { 
   tmr_body = millis(); 
   count_body = count_body + 1; 
   cnt_body = count_body / 60; }  
 kl2_work_cycle(); // РАБОТА КЛАПАНА ОТБОРА 2
-check_tf();       //ПРОВЕРКА НА ЗАВЫШЕНИЕ ТЕМПЕРАТУРЫ 
 // отбор голов из царги пастеризации в процессе отбора тела 
 kl1_work_cycle2(); // РАБОТА КЛАПАНА ОТБОРА 1 СО СНИЖЕННОЙ СКОРОСТЬЮ ОТБОРА
 // нормальная остановка по превышению лимита 
+check_tf();       //ПРОВЕРКА НА ЗАВЫШЕНИЕ ТЕМПЕРАТУРЫ 
 if (xflag_count > overtemp_limit) { stop_proc(); err_desc = "NORMAL RE STOP";}
  }
 } // КОНЕЦ РАБОТЫ ПО ОТБОРУ ПРОДУКТА НА РЕЖИМЕ RE_2KL
-
+} // КОНЕЦ РАБОТЫ ПО start_stop
+else { //сбрасываем все счетчики и флаги если остановили нагрев! start_stop = 0  
+count_body = 0;
+cnt_body = 0;
+submode = "-";
+count_body = 0;
+cnt_body = 0;
+count_head = 0;
+cnt_head = 0;
+uo_temp_fix = 0;
+xflag = 0;
+tflag = 0;
+xflag_count = 0;
+}
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // УПРАВЛЕНИЕ ПОМПОЙ НА РАЗНЫХ РЕЖИМАХ
 static uint32_t tmr_pump;
@@ -645,7 +649,7 @@ lcd.setCursor(3,2); lcd.print(uo_temp); lcd.write(223); lcd.print(" ");
 lcd.setCursor(0,3); lcd.print("Tf:");
 lcd.setCursor(3,3); lcd.print(uo_temp_fix); lcd.write(223); lcd.print(" ");
 // Вывод режима работы
-lcd.setCursor(9,3); lcd.print(" "); lcd.print(mode_desc); lcd.print("    ");
+lcd.setCursor(9,3); lcd.print(" "); lcd.print(mode_desc); lcd.print(" ");
 // Вывод мощности нагрева (%)
 lcd.setCursor(9,0); lcd.print(" TEN:");
 lcd.setCursor(14,0); lcd.print("   ");
@@ -659,10 +663,18 @@ lcd.setCursor(19,1); lcd.print(" ");
 //Вывод счетчика и индикатора подрежима
 if (mode == 1 || mode == 4) { lcd.setCursor(9,2); lcd.print(" P/M  "); }
 if (mode == 2 || mode == 3) { lcd.setCursor(9,2); lcd.print("      "); lcd.setCursor(10,2); lcd.print(submode); }
-
+// Вывод счтетчиков по режимам работы
+if (submode == "S") {lcd.setCursor(12,2); lcd.print(cnt_stab);}
+if (submode == "H") {lcd.setCursor(12,2); lcd.print(cnt_head);}
+if (submode == "B") {lcd.setCursor(12,2); lcd.print(cnt_body);}
+if (submode == "R") {lcd.setCursor(12,2); lcd.print("N/A");}
 // СТАРТ/СТОП
 lcd.setCursor(15,2); lcd.print(" ");
-lcd.setCursor(16,2); lcd.print(start_desc);
+if (start_stop) {lcd.setCursor(16,2); lcd.print(" WRK");}
+else {lcd.setCursor(16,2); lcd.print(" STP");}
+// ИНДИКАТОР ВКЛ/ОТКЛ ПОМПЫ
+if (digitalRead(PUMP_PIN) == 1 ) {lcd.setCursor(17,3); lcd.print("PMP");}
+if (digitalRead(PUMP_PIN) == 0 ) {lcd.setCursor(17,3); lcd.print("OFF");}
 }
 
 void menu_screen() { // Меню настроек, постраничный вывод в зависимости от указателя ptr который меняем поворотами энкодера
@@ -702,9 +714,9 @@ lcd.setCursor(15,0); lcd.print(delt); lcd.write(223);
 lcd.setCursor(15,1); lcd.print("    s");
 lcd.setCursor(15,1); lcd.print(decr);
 lcd.setCursor(15,2); lcd.print("    %");
-lcd.setCursor(15,2); lcd.print(re_pwr_start);
+lcd.setCursor(15,2); lcd.print(re_pwr_stab);
 lcd.setCursor(15,3); lcd.print("    %");
-lcd.setCursor(15,3); lcd.print(re_pwr_end);
+lcd.setCursor(15,3); lcd.print(re_pwr_work);
 }
 // PAGE4
 if (ptr > 11 && ptr < 16) {
@@ -788,30 +800,31 @@ lcd.setCursor(14,3);lcd.print(int(watt_pow));
 // РАБОТА ПЕРВОГО КЛАПАНА НА РЕЖИМЕ R1_KL и R2_KL - ПРИ ОТБОРЕ ГОЛОВ
 void kl1_work_cycle() {
 static uint32_t tmr_kl1_head; 
-if (millis() - tmr_kl1_head >= (k1_per * 1000)) { // РАБОТА КЛАПАНА ОТБОРА
-    tmr_kl1_head = millis();
-    digitalWrite(KL1_PIN, 1); }     // Открыли клапан 1
-if (millis() - tmr_kl1_head >= k1_time) {  // Закрыли клапан 1 по времени kl1time в % от периода
+if ((millis() - tmr_kl1_head >= (k1_per * 1000))) { //асинхронная работа по таймеру
+    digitalWrite(KL1_PIN, 1);
+    tmr_kl1_head = millis(); } 
+if (millis() - tmr_kl1_head >= k1_time) {
     digitalWrite(KL1_PIN, 0); }
 }
 //РАБОТА ВТОРОГО КЛАПАНА НА РЕЖИМЕ R2_KL, ОТБОР ТЕЛА
 void kl2_work_cycle() {
 static uint32_t tmr_kl2_body;
 if ((millis() - tmr_kl2_body >= (k2_per * 1000)) && (uo_temp < (uo_temp_fix + delt))) {
+    digitalWrite(KL2_PIN, 1);
     tmr_kl2_body = millis();
-    digitalWrite(KL2_PIN, 1); // Открыли клапан
-    xflag = 0; } // Сбрасываем флаг завышения если температура пришла в норму после завышения
-if (millis() - tmr_kl2_body >= k2_time) {  // Закрыли клапан 2 по времени k2time в % от периода
-    digitalWrite(KL2_PIN, 0);}
+    xflag = 0; }              // Сбрасываем флаг завышения если температура пришла в норму после завышения
+if (millis() - tmr_kl2_body >= k2_time) {
+    digitalWrite(KL2_PIN, 0); }
 }
-
 // РАБОТА ПЕРВОГО КЛАПАНА В РЕЖИМЕ ДОБОРА ГОЛОВ НА RE_2KL, ИЛИ ОТБОРА ТЕЛА ПРИ R1_KL
 void kl1_work_cycle2() {
-  static uint32_t tmr_kl1_past; 
-if (millis() - tmr_kl1_past >= (k1_per2 * 1000)) {
-    tmr_kl1_past = millis();
-    digitalWrite(KL1_PIN, 1); }
-if (millis() - tmr_kl1_past >= k1_time2) { 
+static uint32_t tmr_kl1_past; 
+if ((millis() - tmr_kl1_past >= (k1_per2 * 1000)) && (uo_temp < (uo_temp_fix + delt))) {
+    digitalWrite(KL1_PIN, 1);
+    tmr_kl1_past = millis(); 
+    if (mode == 2) { xflag = 0; } // для режима R1_KL нужно сбрасывать флаг завышения температуры в работе клапана 1
+    }
+if (millis() - tmr_kl1_past >= k1_time2) {
     digitalWrite(KL1_PIN, 0); }
 }
 // ПРОВЕРКА НА ЗАВЫШЕНИЕ ФИКСИРОВАННОЙ ТЕМПЕРАТУРЫ
@@ -825,22 +838,10 @@ if ((uo_temp >= (uo_temp_fix + delt)) && !xflag) {
   xflag_count = xflag_count + 1; }
 }
 
-// ВЫЧИСЛЯЕМ ДЕЛЬТУ ПО ТЕМПЕРАТУРЕ С ИЗМЕНЕНИЕМ АТМ ДАВЛЕНИЯ
-void calc_delta() {
-// Если датчик давления полностью исправен то вычисляем дельту по температуре и корректируем fix температуру в УО/ЦАРГЕ.
-// шаг изменения температуры кипения спирта 0.038 градуса Цельсия на 1 мм рт ст. Зависимость линейная. 
-if (!bmp_err && bmp_press > 712 && bmp_press < 781 && uo_temp_fix > 70) {  // Адекватные пределы давления на случай если датчик откажет в процесс (покажет 140), 
-// и проверка условия наличия не нулевого значения в переменной uo_temp_fix
-  press_curr = float(bmp_press);
-  press_delta = press_init - press_curr;
-  uo_temp_fix = uo_temp_fix + (press_delta * 0.038);
-  }
-}
 // ФИКСАЦИЯ ТЕМПЕРАТУРЫ ОТБОРА И НАЧАЛЬНОГО ДАВЛЕНИЯ
 void fix_temp() {
 if (uo_temp > tuo_ref && count_stab >= (stab_time * 60) && count_head > (head_time * 60) && !tflag) {
    uo_temp_fix = uo_temp;
-   uo_temp_fix_init = uo_temp;
    tflag = 1;
    digitalWrite(KL1_PIN, 0); // Клапан закрываем на случай если возвращались добирать головы
    // Если датчик давления полностью исправен то забираем начальное давление в переменную
@@ -879,7 +880,6 @@ html_page = html_page + "<tr><td>Head Time</td><td align=\"center\">" + String(h
 html_page = html_page + "<tr><td>Delta T</td><td align=\"center\">" + String(delt) + "</td><td align=\"center\">&#176C</td></tr>";
 html_page = html_page + "<tr><td>Cycle Decrement</td><td align=\"center\">" + String(decr) + "</td><td align=\"center\"> sec </td></tr>";
 html_page = html_page + "<tr><td>Stab Enable</td><td align=\"center\">" + String(pow_stab) + "</td><td align=\"center\"> - </td></tr>";
-html_page = html_page + "<tr><td>Init Fix Temp</td><td align=\"center\">" + String(uo_temp_fix_init) + "</td><td align=\"center\">&#176C</td></tr>";
 html_page = html_page + "<tr><td>Fixed Temp</td><td align=\"center\">" + String(uo_temp_fix) + "</td><td align=\"center\">&#176C</td></tr>";
 html_page = html_page + "<tr><td>Init Fix Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
 html_page = html_page + "<tr><td>Delta Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
@@ -940,8 +940,8 @@ if (EEPROM.readInt(16) != k2_time)      { EEPROM.writeInt(16, k2_time); }
 if (EEPROM.readInt(20) != stab_time)    { EEPROM.writeInt(20, stab_time); }
 if (EEPROM.readInt(24) != head_time)    { EEPROM.writeInt(24, head_time); }
 if (EEPROM.readInt(28) != decr)         { EEPROM.writeInt(28, decr); }
-if (EEPROM.readInt(32) != re_pwr_start) { EEPROM.writeInt(32, re_pwr_start); }
-if (EEPROM.readInt(36) != re_pwr_end)   { EEPROM.writeInt(36, re_pwr_end); }
+if (EEPROM.readInt(32) != re_pwr_stab)  { EEPROM.writeInt(32, re_pwr_stab); }
+if (EEPROM.readInt(36) != re_pwr_work)  { EEPROM.writeInt(36, re_pwr_work); }
 if (EEPROM.readInt(40) != ps_pwr_start) { EEPROM.writeInt(40, ps_pwr_start); }
 if (EEPROM.readInt(44) != ps_pwr_end)   { EEPROM.writeInt(44, ps_pwr_end); }
 if (EEPROM.readInt(48) != ps_stop_temp) { EEPROM.writeInt(48, ps_stop_temp); }
@@ -972,8 +972,8 @@ k2_time = EEPROM.readInt(16);
 stab_time = EEPROM.readInt(20);
 head_time = EEPROM.readInt(24);
 decr = EEPROM.readInt(28);
-re_pwr_start = EEPROM.readInt(32);
-re_pwr_end = EEPROM.readInt(36);
+re_pwr_stab = EEPROM.readInt(32);
+re_pwr_work = EEPROM.readInt(36);
 ps_pwr_start = EEPROM.readInt(40);
 ps_pwr_end = EEPROM.readInt(44);
 ps_stop_temp = EEPROM.readInt(48);
@@ -1054,7 +1054,7 @@ lcd.setCursor(0,1); lcd.print("TSA_ERR:"); lcd.print(alarm_tsa);
 lcd.setCursor(0,2); lcd.print("SIM_ERR:"); lcd.print(alarm_sim);
 lcd.setCursor(0,3); lcd.print("MQ3_ERR:"); lcd.print(alarm_mq3);
 lcd.setCursor(9,0); lcd.print("  POW_ERR:"); lcd.print(alarm_power);
-lcd.setCursor(9,1); lcd.print("           ");
-lcd.setCursor(9,2); lcd.print("           ");
-lcd.setCursor(9,3); lcd.print("           ");
+lcd.setCursor(9,1); lcd.print("  T-SENS :"); lcd.print(alarm_t_sensors);
+lcd.setCursor(9,2); lcd.print("  S-SENS :"); lcd.print(alarm_sim_t_sensor);
+lcd.setCursor(9,3); lcd.print("  ********"); lcd.print("0");
 }
