@@ -476,7 +476,9 @@ if (mode == 1 && cube_temp < 75 ) {
 if (mode == 1 && cube_temp >= 75) {
   ten_pow = map(cube_temp, 75, ps_stop_temp, ps_pwr_start, ps_pwr_end);
   submode = "P"; }
-// РЕЖИМЫ РЕКТИФИКАЦИИ 
+// РЕЖИМЫ РЕКТИФИКАЦИИ МОЩНОСТЬ ФИКСИРОВАННАЯ (сомнительный момент, со снижением концентрации спирта в кубе, скорее всего будет меняться объем испаряемого спирта в час)
+// возможно стоит задать автоматическое приращение мощности в % к заданной начальной. Начальную принять для 80 в кубе, конечную для 97. 
+// но тут надо почитать.. возможно количество испаряемого спирта не меняется
 if ((mode == 2 || mode == 3) && uo_temp < tuo_ref) { ten_pow = rpower; submode = "R";}
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "S") { ten_pow = re_pwr_stab; }
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "H") { ten_pow = re_pwr_stab; }
@@ -859,43 +861,109 @@ WiFiClient client = server.available();      // Проверяем сервер
 if (client) {                                // Если есть клиентское подключение то формируем HTML страничку
 html_page = "";
 html_page = html_page + "<!DOCTYPE html><html translate=\"no\">";
-html_page = html_page + "<head><title>SamWeb</title></head>";
-html_page = html_page + "<body><h2>AUTOMATION SERVER V7</h2>";
-html_page = html_page + "<table border=\"1\" cellspacing=\"1\" cellpadding=\"0\">";
-html_page = html_page + "<tr><th> Parameter </th><th> Value </th><th> Measure </th></tr>";
+html_page = html_page + "<head><title>AUTO V7 WEB</title><style> table, th, td { border: 2px solid gray; border-collapse: collapse; background-color: white;}</style></head>";
+html_page = html_page + "<body style=\"background-color:black;\"> <h2 style=\"color: white;\"> BLACK BOX V7 </h2>";
+// РЕЖИМ РАБОТЫ
+html_page = html_page + "<h3 style=\"color: white;\">Mode</h3>";
+html_page = html_page + "<table cellspacing=\"2\" cellpadding=\"2\">";
 html_page = html_page + "<tr><td>Mode</td><td align=\"center\">" + mode_desc + "</td><td align=\"center\">" + submode + "</td></tr>";
-html_page = html_page + "<tr><td>Start/Stop</td><td align=\"center\">" + start_desc + "</td><td align=\"center\"> - </td></tr>";
-html_page = html_page + "<tr><td>Cube Temp</td><td align=\"center\">" + String(cube_temp) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Tsarg Temp</td><td align=\"center\">" + String(uo_temp) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>TSA Temp</td><td align=\"center\">" + String(defl_temp) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Sim Temp</td><td align=\"center\">" + String(sim_temp) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Heat Power</td><td align=\"center\">" + String(ten_pow) + "</td><td align=\"center\"> % </td></tr>";
-html_page = html_page + "<tr><td>K1 Cycle 1</td><td align=\"center\">" + String(k1_per) + "</td><td align=\"center\"> sec </td></tr>";
-html_page = html_page + "<tr><td>K1 Time 1</td><td align=\"center\">" + String(k1_time) + "</td><td align=\"center\"> ms </td></tr>";
-html_page = html_page + "<tr><td>K1 Cycle 2</td><td align=\"center\">" + String(k1_per2) + "</td><td align=\"center\"> sec </td></tr>";
-html_page = html_page + "<tr><td>K1 Time 2</td><td align=\"center\">" + String(k1_time2) + "</td><td align=\"center\"> ms </td></tr>";
-html_page = html_page + "<tr><td>K2 Cycle</td><td align=\"center\">" + String(k2_per) + "</td><td align=\"center\"> sec </td></tr>";
-html_page = html_page + "<tr><td>K2 Time</td><td align=\"center\">" + String(k2_time) + "</td><td align=\"center\"> ms </td></tr>";
-html_page = html_page + "<tr><td>Stab Time</td><td align=\"center\">" + String(stab_time) + "</td><td align=\"center\"> min </td></tr>";
-html_page = html_page + "<tr><td>Head Time</td><td align=\"center\">" + String(head_time) + "</td><td align=\"center\"> min </td></tr>";
-html_page = html_page + "<tr><td>Delta T</td><td align=\"center\">" + String(delt) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Cycle Decrement</td><td align=\"center\">" + String(decr) + "</td><td align=\"center\"> sec </td></tr>";
-html_page = html_page + "<tr><td>Stab Enable</td><td align=\"center\">" + String(pow_stab) + "</td><td align=\"center\"> - </td></tr>";
-html_page = html_page + "<tr><td>Fixed Temp</td><td align=\"center\">" + String(uo_temp_fix) + "</td><td align=\"center\">&#176C</td></tr>";
-html_page = html_page + "<tr><td>Init Fix Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
-html_page = html_page + "<tr><td>Delta Press</td><td align=\"center\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
-html_page = html_page + "<tr><td>Temp over-delta</td><td align=\"center\">" + String(xflag_count) + "</td><td align=\"center\"> - </td></tr>";
-html_page = html_page + "<tr><td>Spent Stab</td><td align=\"center\">" + String(cnt_stab) + "</td><td align=\"center\"> min </td></tr>";
-html_page = html_page + "<tr><td>Spent Head</td><td align=\"center\">" + String(cnt_head) + "</td><td align=\"center\"> min </td></tr>";
-html_page = html_page + "<tr><td>Spent Main</td><td align=\"center\">" + String(cnt_body) + "</td><td align=\"center\"> min </td></tr>";
-html_page = html_page + "<tr><td>Atm.pressure</td><td align=\"center\">" + String(bmp_press) + "</td><td align=\"center\"> mm rt.st. </td></tr>";
-html_page = html_page + "<tr><td>Razgon Power</td><td align=\"center\">" + String(rpower) + "</td><td align=\"center\"> % </td></tr>";
-html_page = html_page + "<tr><td>Calc Power</td><td align=\"center\">" + String(watt_pow) + "</td><td align=\"center\"> Wt </td></tr>";
-html_page = html_page + "<tr><td>Fact Power</td><td align=\"center\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
-html_page = html_page + "<tr><td>Voltage</td><td align=\"center\">" + String(voltage) + "</td><td align=\"center\"> V </td></tr>";
-html_page = html_page + "<tr><td>Current</td><td align=\"center\">" + String(current) + "</td><td align=\"center\"> A </td></tr>";
-html_page = html_page + "<tr><td>Energy</td><td align=\"center\">" + String(energy) + "</td><td align=\"center\"> kWt*h </td></tr>";
+if (!start_stop) {
+html_page = html_page + "<tr><td>Start/Stop</td><td colspan=\"2\" align=\"center\" style=\"background-color: yellow;\">" + start_desc + "</td></tr>"; }
+else {
+html_page = html_page + "<tr><td>Start/Stop</td><td colspan=\"2\" align=\"center\" style=\"background-color: red;\">" + start_desc + "</td></tr>"; }
 html_page = html_page + "</table>";
+// ДАТЧИКИ ТЕМПЕРАТУРЫ И ДАВЛЕНИЯ
+html_page = html_page + "<h3 style=\"color: white;\">Sensors</h3>";
+html_page = html_page + "<table cellspacing=\"2\" cellpadding=\"2\">";
+// Окрашиваем строку в зависимости от значения температуры
+if (int(cube_temp) < 70) {
+html_page = html_page + "<tr><td>Cube Temp</td><td align=\"left\" style=\"background-color: green;\">" + String(cube_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(cube_temp) >= 70 && int(cube_temp) < 96 ) {
+html_page = html_page + "<tr><td>Cube Temp</td><td align=\"left\" style=\"background-color: yellow;\">" + String(cube_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(cube_temp) >= 96 ) {
+html_page = html_page + "<tr><td>Cube Temp</td><td align=\"left\" style=\"background-color: red;\">" + String(cube_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+// для температуры в царге
+if (int(uo_temp) < 80) {
+html_page = html_page + "<tr><td>Tsarg Temp</td><td align=\"left\" style=\"background-color: green;\">" + String(uo_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(uo_temp) >= 80 && int(uo_temp) < 85) {
+html_page = html_page + "<tr><td>Tsarg Temp</td><td align=\"left\" style=\"background-color: yellow;\">" + String(uo_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(uo_temp) >= 85) {
+html_page = html_page + "<tr><td>Tsarg Temp</td><td align=\"left\" style=\"background-color: red;\">" + String(uo_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+// для температуры в ТСА/дефлегматоре
+if (int(defl_temp) < 35) {
+html_page = html_page + "<tr><td>TSA Temp</td><td align=\"left\" style=\"background-color: green;\">" + String(defl_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(defl_temp) >= 35 && int(defl_temp) < 40) {
+html_page = html_page + "<tr><td>TSA Temp</td><td align=\"left\" style=\"background-color: yellow;\">" + String(defl_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(defl_temp) >= 40) {
+html_page = html_page + "<tr><td>TSA Temp</td><td align=\"left\" style=\"background-color: red;\">" + String(defl_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+// температура симистора
+if (int(sim_temp) < 40) {
+html_page = html_page + "<tr><td>Sim Temp</td><td align=\"left\" style=\"background-color: green;\">" + String(sim_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(sim_temp) >= 40 && int(sim_temp) < 45) {
+html_page = html_page + "<tr><td>Sim Temp</td><td align=\"left\" style=\"background-color: yellow;\">" + String(sim_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+if (int(sim_temp) >= 45) {
+html_page = html_page + "<tr><td>Sim Temp</td><td align=\"left\" style=\"background-color: red;\">" + String(sim_temp) + "</td><td align=\"center\">&#176C</td></tr>";
+}
+html_page = html_page + "<tr><td>Atm.pressure</td><td align=\"left\">" + String(bmp_press) + "</td><td align=\"center\"> mm rt.st. </td></tr>";
+html_page = html_page + "</table>";
+// ПАРАМЕТРЫ КОНФИГУРАЦИИ
+html_page = html_page + "<h3 style=\"color: white;\">Config Parameters</h3>";
+html_page = html_page + "<table cellspacing=\"2\" cellpadding=\"2\">";
+html_page = html_page + "<tr><td>K1 Cycle 1</td><td align=\"left\">" + String(k1_per) + "</td><td align=\"center\"> sec </td></tr>";
+html_page = html_page + "<tr><td>K1 Time 1</td><td align=\"left\">" + String(k1_time) + "</td><td align=\"center\"> ms </td></tr>";
+html_page = html_page + "<tr><td>K1 Cycle 2</td><td align=\"left\">" + String(k1_per2) + "</td><td align=\"center\"> sec </td></tr>";
+html_page = html_page + "<tr><td>K1 Time 2</td><td align=\"left\">" + String(k1_time2) + "</td><td align=\"center\"> ms </td></tr>";
+html_page = html_page + "<tr><td>K2 Cycle</td><td align=\"left\">" + String(k2_per) + "</td><td align=\"center\"> sec </td></tr>";
+html_page = html_page + "<tr><td>K2 Time</td><td align=\"left\">" + String(k2_time) + "</td><td align=\"center\"> ms </td></tr>";
+html_page = html_page + "<tr><td>Stab Time</td><td align=\"left\">" + String(stab_time) + "</td><td align=\"center\"> min </td></tr>";
+html_page = html_page + "<tr><td>Head Time</td><td align=\"left\">" + String(head_time) + "</td><td align=\"center\"> min </td></tr>";
+html_page = html_page + "<tr><td>Delta T</td><td align=\"left\">" + String(delt) + "</td><td align=\"center\">&#176C</td></tr>";
+html_page = html_page + "<tr><td>Cycle Decrement</td><td align=\"left\">" + String(decr) + "</td><td align=\"center\"> sec </td></tr>";
+html_page = html_page + "<tr><td>Stab Enable</td><td align=\"left\">" + String(pow_stab) + "</td><td align=\"center\"> - </td></tr>";
+html_page = html_page + "<tr><td>Razgon Power</td><td align=\"left\">" + String(rpower) + "</td><td align=\"center\"> % </td></tr>";
+html_page = html_page + "</table>";
+// ПАРАМЕТРЫ ПОЛУЧАЕМЫЕ В РАБОТЕ
+html_page = html_page + "<h3 style=\"color: white;\">Progress values</h3>";
+html_page = html_page + "<table cellspacing=\"2\" cellpadding=\"2\">";
+html_page = html_page + "<tr><td>Fixed Temp</td><td align=\"left\">" + String(uo_temp_fix) + "</td><td align=\"center\">&#176C</td></tr>";
+html_page = html_page + "<tr><td>Init Fix Press</td><td align=\"left\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
+html_page = html_page + "<tr><td>Delta Press</td><td align=\"left\">" + String(press_init) + "</td><td align=\"center\">mm rt.st.</td></tr>";
+// подсвечиваем завышения температуры
+if (int(xflag_count) < 1) {
+html_page = html_page + "<tr><td>Temp Spikes</td><td align=\"left\" style=\"background-color: green;\">" + String(xflag_count) + "</td><td align=\"center\"> - </td></tr>";
+}
+if (int(xflag_count) >= 1 && int(xflag_count) < 3) {
+html_page = html_page + "<tr><td>Temp Spikes</td><td align=\"left\" style=\"background-color: yellow;\">" + String(xflag_count) + "</td><td align=\"center\"> - </td></tr>";
+}
+if (int(xflag_count) >= 3) {
+html_page = html_page + "<tr><td>Temp Spikes</td><td align=\"left\" style=\"background-color: red;\">" + String(xflag_count) + "</td><td align=\"center\"> - </td></tr>";
+}
+html_page = html_page + "<tr><td>Spent Stab</td><td align=\"left\">" + String(cnt_stab) + "</td><td align=\"center\"> min </td></tr>";
+html_page = html_page + "<tr><td>Spent Head</td><td align=\"left\">" + String(cnt_head) + "</td><td align=\"center\"> min </td></tr>";
+html_page = html_page + "<tr><td>Spent Main</td><td align=\"left\">" + String(cnt_body) + "</td><td align=\"center\"> min </td></tr>";
+html_page = html_page + "</table>";
+// ПОКАЗАТЕЛИ ПИТАНИЯ
+html_page = html_page + "<h3 style=\"color: white;\">Power</h3>";
+html_page = html_page + "<table cellspacing=\"2\" cellpadding=\"2\">";
+html_page = html_page + "<tr><td>Heat Power</td><td align=\"left\">" + String(ten_pow) + "</td><td align=\"center\"> % </td></tr>";
+html_page = html_page + "<tr><td>Calc Power</td><td align=\"left\">" + String(watt_pow) + "</td><td align=\"center\"> Wt </td></tr>";
+html_page = html_page + "<tr><td>Real Power</td><td align=\"left\">" + String(power) + "</td><td align=\"center\"> Wt </td></tr>";
+html_page = html_page + "<tr><td>Voltage</td><td align=\"left\">" + String(voltage) + "</td><td align=\"center\"> V </td></tr>";
+html_page = html_page + "<tr><td>Current</td><td align=\"left\">" + String(current) + "</td><td align=\"center\"> A </td></tr>";
+html_page = html_page + "<tr><td>Energy</td><td align=\"left\">" + String(energy) + "</td><td align=\"center\"> kWt*h </td></tr>";
+html_page = html_page + "</table>";
+//
 html_page = html_page + "</body></html>";
 client.println(html_page);                     // выдем страницу клиенту
 client.println();                            
