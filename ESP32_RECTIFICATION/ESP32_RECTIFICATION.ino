@@ -105,6 +105,9 @@ int ten_pow_delt = 0;             // ВЫЧИСЛЯЕМАЯ ДЕЛЬТУ ПО М
 int ten_pow_calc = 0;             // ВЫЧИСЛЯЕМАЯ КОРРЕКТИРОВКА МОЩНОСТИ В %
 int tuo_ref;                      // ТЕМПЕРАТУРА ЦАРГИ/УЗЛА_ОТБОРА ДЛЯ СТАРАТ РЕЖИМА СТАБИЛИЗАЦИИ 
 int overtemp_limit = 5;           // ЛИМИТ ЧИСЛА ПРЕВЫШЕНИЙ ПО ТЕМПЕРАТУРЕ НА RE_1KL, RE_2KL
+int count_beer63 = 0;             // СЧЕТЧИК ВРЕМЕНИ ЗАТИРАНИЯ 63
+int count_beer72 = 0;             // СЧЕТЧИК ВРЕМЕНИ ЗАТИРАНИЯ 72
+int count_beer78 = 0;             // СЧЕТЧИК ВРЕМЕНИ ЗАТИРАНИЯ 78
 // ФЛАГИ АВАРИЙ
 bool alarm_tsa = 0;               // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ ТСА
 bool alarm_cube = 0;              // ФЛАГ ОШИБКИ ПО ТЕМПЕРАТУРЕ КУБА
@@ -292,7 +295,7 @@ if (enc.right()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В
         if (ptr == 14) {ps_stop_temp = constrain(ps_stop_temp + 1, 0, 100);}
         if (ptr == 15) {man_pwr = constrain(man_pwr + 1, 0, 100);}
 //
-        if (ptr == 16) {mode = constrain(mode + 1, 1, 4);}
+        if (ptr == 16) {mode = constrain(mode + 1, 1, 5);}
         if (ptr == 17) {start_stop = constrain(start_stop + 1, 0, 1);}
         if (ptr == 18) {ten_init_pow = constrain(ten_init_pow + 100, 0, 5000);}
         if (ptr == 19) {rpower = constrain(rpower + 1, 0, 100);}
@@ -332,7 +335,7 @@ if (enc.left()) { // ОБРАБОТКА ПОВОРОТОВ ЭНКОДЕРА (В�
         if (ptr == 14) {ps_stop_temp = constrain(ps_stop_temp - 1, 0, 100);}
         if (ptr == 15) {man_pwr = constrain(man_pwr - 1, 0, 100);}
 //
-        if (ptr == 16) {mode = constrain(mode - 1, 1, 3);}
+        if (ptr == 16) {mode = constrain(mode - 1, 1, 5);}
         if (ptr == 17) {start_stop = constrain(start_stop - 1, 0, 1);}
         if (ptr == 18) {ten_init_pow = constrain(ten_init_pow - 100, 0, 5000);}
         if (ptr == 19) {rpower = constrain(rpower - 1, 0, 100);}
@@ -438,6 +441,7 @@ if (mode == 1) { mode_desc = "PSTILL";}
 if (mode == 2) { mode_desc = "REC1KL";}
 if (mode == 3) { mode_desc = "REC2KL";}
 if (mode == 4) { mode_desc = "MANUAL";}
+if (mode == 5) { mode_desc = " BEER ";} // ДЛЯ ЗАТИРАНИЯ СОЛОДА
 if (start_stop == 1) {start_desc = "WORK";}
 if (start_stop == 0) {start_desc = "STOP";}
 if (alarm_cube)  {err_desc = "ERR CUBE TEMP ";}
@@ -484,7 +488,7 @@ if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "S") { ten_pow 
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "H") { ten_pow = re_pwr_stab; }
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "B") { ten_pow = re_pwr_work; } 
 // РУЧНОЙ РЕЖИМ
-if (mode == 4){ submode = "-";
+if (mode == 4 || mode == 5){ submode = "-";
 ten_pow = man_pwr; }
 // КОРРЕКЦИЯ МОЩНОСТИ
 // ВЫЧИСЛЯЕМ В ВАТТАХ ЗАДАННУЮ В % МОЩНОСТЬ
@@ -587,6 +591,44 @@ xflag = 0;
 tflag = 0;
 xflag_count = 0;
 }
+// # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+// ЗАТИРАНИЕ СУСЛА
+// ### 63 градуса 40 минут (2400 sec)
+if (mode == 5 && start_stop && count_beer63 <= 2400) {
+   static uint32_t tmr_beer63;
+   if (millis() - tmr_beer63 >= 1000) { 
+   tmr_beer63 = millis();
+   count_beer63 = count_beer63 + 1;
+      if (int(cube_temp) >= 63) {ten_pow = 0;} // выключаем нагрев
+   else {ten_pow = rpower;} // Включаем нагрев если температура меньше, мощность берем 
+   }
+}
+// ### 72 градуса 20 минут
+if (mode == 5 && start_stop && count_beer63 > 2400 && count_beer72 <= 1200 ) {
+   static uint32_t tmr_beer72;
+   if (millis() - tmr_beer72 >= 1000) { 
+   tmr_beer72 = millis();
+   count_beer72 = count_beer72 + 1;
+      if (int(cube_temp) >= 72) {ten_pow = 0;} // выключаем нагрев
+   else {ten_pow = rpower;} // Включаем нагрев если температура меньше, мощность берем 
+   }
+}
+// ### 78 градусов 10 минут
+if (mode == 5 && start_stop && count_beer63 > 2400 && count_beer72 > 1200 && count_beer78 <= 600) {
+   static uint32_t tmr_beer78;
+   if (millis() - tmr_beer78 >= 1000) { 
+   tmr_beer78 = millis();
+   count_beer78 = count_beer78 + 1;
+      if (int(cube_temp) >= 78) {ten_pow = 0;} // выключаем нагрев
+   else {ten_pow = rpower;} // Включаем нагрев если температура меньше, мощность берем 
+   }
+}
+// Остановка процесса
+if (mode == 5 && start_stop && count_beer63 > 2400 && count_beer72 > 1200 && count_beer78 > 600) {
+  stop_proc(); err_desc = "BEER_PREP_STOP";
+}
+
+
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // УПРАВЛЕНИЕ ПОМПОЙ НА РАЗНЫХ РЕЖИМАХ
 static uint32_t tmr_pump;
