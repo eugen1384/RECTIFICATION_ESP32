@@ -488,8 +488,8 @@ if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "S") { ten_pow 
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "H") { ten_pow = re_pwr_stab; }
 if ((mode == 2 || mode == 3) && uo_temp >= tuo_ref && submode == "B") { ten_pow = re_pwr_work; } 
 // РУЧНОЙ РЕЖИМ
-if (mode == 4 || mode == 5){ submode = "-";
-ten_pow = man_pwr; }
+if (mode == 4 ){ submode = "-";
+ten_pow = man_pwr;}
 // КОРРЕКЦИЯ МОЩНОСТИ
 // ВЫЧИСЛЯЕМ В ВАТТАХ ЗАДАННУЮ В % МОЩНОСТЬ
 ten_init_f_pow = float(ten_init_pow);  // для результата с запятой нужно преобразование переменной
@@ -594,6 +594,7 @@ xflag_count = 0;
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 // ЗАТИРАНИЕ СУСЛА
 // ### 63 градуса 40 минут (2400 sec)
+if (mode == 5) {submode = "b";}
 if (mode == 5 && start_stop && count_beer63 <= 2400) {
    static uint32_t tmr_beer63;
    if (millis() - tmr_beer63 >= 1000) { 
